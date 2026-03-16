@@ -183,7 +183,10 @@ async def analyze_frame(req: AnalyzeRequest):
     else:
         baseline_str = json.dumps(req.baseline) if req.baseline else "No baseline set"
         ctx = req.patient_context or {}
-        demo_parts = [f"{ctx.get('age', 'N/A')}yo {ctx.get('sex', '')}"]
+        demo_parts = []
+        if ctx.get('patient_id'):
+            demo_parts.append(f"ID: {ctx['patient_id']}")
+        demo_parts.append(f"{ctx.get('age', 'N/A')}yo {ctx.get('sex', '')}")
         if ctx.get('weight'): demo_parts.append(f"{ctx['weight']}kg")
         if ctx.get('bmi'): demo_parts.append(f"BMI {ctx['bmi']}")
         if ctx.get('asa'): demo_parts.append(ctx['asa'])

@@ -98,6 +98,11 @@
                 <span class="form-section-chevron">▾</span>
             </div>
             <div class="form-section-body" id="sec-demographics">
+                <div class="setup-field">
+                    <label class="field-label">Patient ID</label>
+                    <input type="text" id="patient-id" class="input-field" placeholder="e.g. MRN, case number, bed number">
+                    <span class="field-hint">For identification only — no patient name required to protect privacy</span>
+                </div>
                 <div class="setup-row">
                     <div class="setup-field">
                         <label class="field-label">Age <span class="req">★</span></label>
@@ -316,19 +321,92 @@
             </div>
             <div class="form-section-body" id="sec-airway">
                 <div class="setup-field">
-                    <label class="field-label">Sedation / Anesthesia Technique <span class="req">★</span></label>
-                    <select id="patient-anesthesia" class="input-field">
-                        <option value="">Select</option>
-                        <option value="None / Monitored">None / Monitored care only</option>
-                        <option value="General anesthesia">General anesthesia</option>
-                        <option value="Spinal anesthesia">Spinal anesthesia</option>
-                        <option value="Epidural anesthesia">Epidural anesthesia</option>
-                        <option value="Regional block">Regional block</option>
-                        <option value="Procedural sedation">Procedural sedation</option>
-                        <option value="Conscious sedation">Conscious sedation</option>
-                        <option value="Combined technique">Combined technique</option>
-                        <option value="ICU sedation">ICU sedation (ventilated)</option>
-                    </select>
+                    <label class="field-label">Anesthesia Technique <span class="req">★</span></label>
+                    <span class="field-hint">Select one or more techniques</span>
+                    <div id="anesthesia-technique-list" class="anesthesia-category-grid">
+
+                        <div class="anesthesia-category">
+                            <h4 class="anesthesia-cat-header">Neuraxial Anesthesia</h4>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Spinal anesthesia"> Spinal anesthesia</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Epidural anesthesia"> Epidural anesthesia</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Combined spinal–epidural anesthesia (CSE)"> Combined spinal–epidural (CSE)</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Segmental spinal anesthesia"> Segmental spinal anesthesia</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Continuous spinal anesthesia"> Continuous spinal anesthesia</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Caudal epidural anesthesia"> Caudal epidural anesthesia</label>
+                            </div>
+                        </div>
+
+                        <div class="anesthesia-category">
+                            <h4 class="anesthesia-cat-header">Peripheral Regional Anesthesia</h4>
+                            <h5 class="anesthesia-subcat-header">Upper Limb Blocks</h5>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Interscalene block"> Interscalene block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Supraclavicular block"> Supraclavicular block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Infraclavicular block"> Infraclavicular block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Axillary block"> Axillary block</label>
+                            </div>
+                            <h5 class="anesthesia-subcat-header">Lower Limb Blocks</h5>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Femoral nerve block"> Femoral nerve block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Sciatic nerve block"> Sciatic nerve block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Popliteal block"> Popliteal block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Adductor canal block"> Adductor canal block</label>
+                            </div>
+                            <h5 class="anesthesia-subcat-header">Truncal / Fascial Plane Blocks</h5>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Transversus abdominis plane (TAP) block"> TAP block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Rectus sheath block"> Rectus sheath block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Paravertebral block"> Paravertebral block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Erector spinae plane block"> Erector spinae plane block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Quadratus lumborum block"> Quadratus lumborum block</label>
+                            </div>
+                            <h5 class="anesthesia-subcat-header">Local Anesthesia</h5>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Local infiltration anesthesia"> Local infiltration anesthesia</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Field block"> Field block</label>
+                            </div>
+                        </div>
+
+                        <div class="anesthesia-category">
+                            <h4 class="anesthesia-cat-header">General Anesthesia</h4>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="General anesthesia with endotracheal tube"> GA with endotracheal tube</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="General anesthesia with LMA"> GA with laryngeal mask airway (LMA)</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Total intravenous anesthesia (TIVA)"> Total intravenous anesthesia (TIVA)</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Balanced general anesthesia"> Balanced general anesthesia</label>
+                            </div>
+                        </div>
+
+                        <div class="anesthesia-category">
+                            <h4 class="anesthesia-cat-header">Sedation / Monitored Anesthesia Care</h4>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Minimal sedation"> Minimal sedation</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Moderate sedation"> Moderate sedation</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Deep sedation"> Deep sedation</label>
+                            </div>
+                        </div>
+
+                        <div class="anesthesia-category">
+                            <h4 class="anesthesia-cat-header">Combined Techniques</h4>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Regional anesthesia with sedation"> Regional anesthesia with sedation</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="General anesthesia with regional block"> General anesthesia with regional block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Spinal anesthesia with sedation"> Spinal anesthesia with sedation</label>
+                            </div>
+                        </div>
+
+                        <div class="anesthesia-category">
+                            <h4 class="anesthesia-cat-header">Other</h4>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" id="anesthesia-other-cb" value="Other"> Other anesthesia technique</label>
+                            </div>
+                            <div id="anesthesia-other-field" class="setup-field hidden" style="margin-top:8px">
+                                <input type="text" id="anesthesia-other-text" class="input-field" placeholder="Please specify other technique">
+                            </div>
+                        </div>
+
+                    </div>
                 </div>
                 <div class="setup-row">
                     <div class="setup-field">
@@ -1039,6 +1117,7 @@
             </div>
             <div class="chat-input-row">
                 <button id="voice-btn" class="btn btn-icon" title="Voice input">🎤</button>
+                <button id="voice-output-btn" class="btn btn-icon" title="Toggle voice output (read responses aloud)">🔇</button>
                 <input type="text" id="chat-input" class="input-field" placeholder="Ask Jarvis anything…">
                 <button id="chat-send" class="btn btn-primary">Send</button>
             </div>
@@ -1097,6 +1176,10 @@
             </div>
             <h4>Patient Context</h4>
             <div class="setup-field">
+                <label class="field-label">Patient ID</label>
+                <input type="text" id="settings-patient-id" class="input-field">
+            </div>
+            <div class="setup-field">
                 <label class="field-label">Age</label>
                 <input type="number" id="settings-age" class="input-field" min="1" max="120">
             </div>
@@ -1113,8 +1196,8 @@
                 <input type="text" id="settings-procedure" class="input-field">
             </div>
             <div class="setup-field">
-                <label class="field-label">Anesthesia Technique</label>
-                <input type="text" id="settings-anesthesia" class="input-field">
+                <label class="field-label">Anesthesia Technique(s)</label>
+                <textarea id="settings-anesthesia" class="input-field textarea" rows="2" readonly></textarea>
             </div>
             <div class="setup-field">
                 <label class="field-label">Comorbidities</label>

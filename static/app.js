@@ -29,6 +29,7 @@ const state = {
     trendWindowSize: 10,
     roiEnabled: true,
     simMode: false,
+    voiceOutputEnabled: false,
     fluidBalance: { ebl: 0, ivf: 0, blood: 0, urine: 0 },
     fluidLog: [],
     drugLog: [],
@@ -599,16 +600,18 @@ class JarvisApp {
         this.bindSectionToggles();
         this.bindBMICalc();
         this.bindComorbidToggle();
+        this.bindAnesthesiaOtherToggle();
 
         $('#start-monitoring').addEventListener('click', () => {
             const apiKey = $('#api-key').value.trim();
             if (!apiKey) { alert('Please enter your Gemini API key'); return; }
 
+            const patientId = $('#patient-id').value.trim();
             const age = $('#patient-age').value.trim();
             const sex = $('#patient-sex').value;
             const clinicalSetting = $('#patient-setting')?.value || '';
             const procedure = $('#patient-procedure').value.trim();
-            const anesthesia = $('#patient-anesthesia').value;
+            const anesthesiaTechniques = this.collectAnesthesiaTechniques();
             const baseHR = $('#base-hr').value.trim();
             const baseSBP = $('#base-sbp').value.trim();
             const baseDBP = $('#base-dbp').value.trim();
@@ -617,7 +620,7 @@ class JarvisApp {
             if (!age || !sex) { alert('Please fill Age and Sex (required fields)'); return; }
             if (!clinicalSetting) { alert('Please select a Clinical Setting (required field)'); return; }
             if (!procedure) { alert('Please fill Procedure / Surgery / Admission Reason (required field)'); return; }
-            if (!anesthesia) { alert('Please select Sedation / Anesthesia Technique (required field)'); return; }
+            if (!anesthesiaTechniques.length) { alert('Please select at least one Anesthesia Technique (required field)'); return; }
             if (!baseHR || !baseSBP || !baseDBP || !baseSpo2) { alert('Please fill mandatory baseline vitals: HR, SBP, DBP, SpO₂'); return; }
 
             state.apiKey = apiKey;
@@ -628,6 +631,7 @@ class JarvisApp {
             const medControlled = document.querySelector('input[name="med-controlled"]:checked')?.value || 'yes';
 
             state.patientContext = {
+                patient_id: patientId || null,
                 age, sex,
                 clinical_setting: clinicalSetting,
                 weight: $('#patient-weight').value || null,
@@ -645,7 +649,7 @@ class JarvisApp {
                 medication_controlled: medControlled,
                 medications: medications.length ? medications.join(', ') : 'None',
                 other_medications: $('#med-other-text').value || null,
-                anesthesia_technique: anesthesia,
+                anesthesia_technique: anesthesiaTechniques.join(', '),
                 airway_assessment: $('#patient-airway-assessment').value || null,
                 difficult_airway: $('#patient-difficult-airway').value || 'No',
                 monitoring_plan: monitoring.length ? monitoring.join(', ') : 'Standard monitoring',
@@ -738,6 +742,26 @@ class JarvisApp {
 
     collectCheckboxes(name) {
         return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(cb => cb.value);
+    }
+
+    bindAnesthesiaOtherToggle() {
+        const otherCb = $('#anesthesia-other-cb');
+        if (otherCb) {
+            otherCb.addEventListener('change', () => {
+                $('#anesthesia-other-field').classList.toggle('hidden', !otherCb.checked);
+            });
+        }
+    }
+
+    collectAnesthesiaTechniques() {
+        const checked = [...document.querySelectorAll('input[name="anesthesia-technique"]:checked')].map(cb => cb.value);
+        const otherIdx = checked.indexOf('Other');
+        if (otherIdx !== -1) {
+            const otherText = $('#anesthesia-other-text').value.trim();
+            if (otherText) checked[otherIdx] = otherText;
+            else checked.splice(otherIdx, 1);
+        }
+        return checked;
     }
 
     renderBaselineVitals() {
@@ -1544,6 +1568,7 @@ class JarvisApp {
         const input = $('#chat-input');
         const sendBtn = $('#chat-send');
         const voiceBtn = $('#voice-btn');
+        const voiceOutputBtn = $('#voice-output-btn');
 
         const sendMessage = () => {
             const msg = input.value.trim();
@@ -1558,6 +1583,17 @@ class JarvisApp {
         });
 
         voiceBtn.addEventListener('click', () => this.startVoiceInput());
+
+        voiceOutputBtn.addEventListener('click', () => {
+            state.voiceOutputEnabled = !state.voiceOutputEnabled;
+            voiceOutputBtn.textContent = state.voiceOutputEnabled ? '🔊' : '🔇';
+            voiceOutputBtn.classList.toggle('btn-voice-active', state.voiceOutputEnabled);
+            if (state.voiceOutputEnabled) {
+                this.alerts.speak('Voice output enabled.');
+            } else {
+                window.speechSynthesis?.cancel();
+            }
+        });
     }
 
     async sendChat(message) {
@@ -1595,6 +1631,10 @@ class JarvisApp {
             if (!fullText) bubbleEl.textContent = '(No response)';
             state.chatHistory.push({ role: 'user', content: message }, { role: 'assistant', content: fullText });
             this.detectSurgicalEvent(message);
+
+            if (state.voiceOutputEnabled && fullText) {
+                this.alerts.speak(fullText);
+            }
         } catch (err) {
             bubbleEl.textContent = `Error: ${err.message}`;
         }
@@ -1617,7 +1657,9 @@ class JarvisApp {
         const parts = [];
         const ctx = state.patientContext;
 
-        let demographics = `Patient: ${ctx.age}yo ${ctx.sex || ''}`;
+        let demographics = '';
+        if (ctx.patient_id) demographics += `Patient ID: ${ctx.patient_id} | `;
+        demographics += `${ctx.age}yo ${ctx.sex || ''}`;
         if (ctx.weight) demographics += ` | ${ctx.weight}kg`;
         if (ctx.bmi) demographics += ` (BMI ${ctx.bmi})`;
         if (ctx.asa) demographics += ` | ${ctx.asa}`;
@@ -1690,39 +1732,69 @@ class JarvisApp {
 
     startVoiceInput() {
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-            alert('Speech recognition not supported in this browser. Try Chrome.');
+            this.appendChat('assistant', 'Speech recognition is not supported in this browser. Please use Google Chrome on desktop for voice input.');
             return;
         }
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
         recognition.continuous = false;
-        recognition.interimResults = false;
+        recognition.interimResults = true;
         recognition.lang = 'en-US';
+        recognition.maxAlternatives = 1;
 
         const voiceBtn = $('#voice-btn');
+        const chatInput = $('#chat-input');
         voiceBtn.classList.add('btn-recording');
         voiceBtn.textContent = '🔴';
+        chatInput.placeholder = 'Listening…';
 
         recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            $('#chat-input').value = transcript;
-            voiceBtn.classList.remove('btn-recording');
-            voiceBtn.textContent = '🎤';
-            this.sendChat(transcript);
+            let interimTranscript = '';
+            let finalTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const t = event.results[i][0].transcript;
+                if (event.results[i].isFinal) finalTranscript += t;
+                else interimTranscript += t;
+            }
+            chatInput.value = finalTranscript || interimTranscript;
+
+            if (finalTranscript) {
+                voiceBtn.classList.remove('btn-recording');
+                voiceBtn.textContent = '🎤';
+                chatInput.placeholder = 'Ask Jarvis anything…';
+                this.sendChat(finalTranscript);
+            }
         };
 
-        recognition.onerror = () => {
+        recognition.onerror = (event) => {
             voiceBtn.classList.remove('btn-recording');
             voiceBtn.textContent = '🎤';
+            chatInput.placeholder = 'Ask Jarvis anything…';
+            const errorMessages = {
+                'no-speech': 'No speech detected. Please try again.',
+                'audio-capture': 'Microphone not found. Please check your microphone.',
+                'not-allowed': 'Microphone permission denied. Please allow microphone access in browser settings.',
+                'network': 'Network error during speech recognition. Please check your internet connection.',
+            };
+            const msg = errorMessages[event.error] || `Voice input error: ${event.error}`;
+            this.appendChat('assistant', msg);
         };
 
         recognition.onend = () => {
             voiceBtn.classList.remove('btn-recording');
             voiceBtn.textContent = '🎤';
+            chatInput.placeholder = 'Ask Jarvis anything…';
         };
 
-        recognition.start();
+        try {
+            recognition.start();
+        } catch (err) {
+            voiceBtn.classList.remove('btn-recording');
+            voiceBtn.textContent = '🎤';
+            chatInput.placeholder = 'Ask Jarvis anything…';
+            this.appendChat('assistant', 'Could not start voice input. Please ensure microphone access is allowed.');
+        }
     }
 
     // ── Surgical Events (Enhanced) ──
@@ -1799,6 +1871,7 @@ class JarvisApp {
             if (!drawer.classList.contains('hidden')) {
                 $('#settings-api-key').value = state.apiKey || '';
                 $('#settings-window').value = state.trendWindowSize;
+                $('#settings-patient-id').value = state.patientContext.patient_id || '';
                 $('#settings-age').value = state.patientContext.age || '';
                 $('#settings-sex').value = state.patientContext.sex || '';
                 $('#settings-procedure').value = state.patientContext.procedure || '';
@@ -1821,10 +1894,10 @@ class JarvisApp {
             if (newKey) state.apiKey = newKey;
             state.trendWindowSize = +$('#settings-window').value || 10;
             this.trendBuffer.windowSize = state.trendWindowSize;
+            state.patientContext.patient_id = $('#settings-patient-id').value.trim() || null;
             state.patientContext.age = $('#settings-age').value;
             state.patientContext.sex = $('#settings-sex').value;
             state.patientContext.procedure = $('#settings-procedure').value;
-            state.patientContext.anesthesia_technique = $('#settings-anesthesia').value;
             state.patientContext.comorbidities = $('#settings-comorbidities').value;
             state.patientContext.allergies = $('#settings-allergies').value;
             const hr = +$('#settings-hr').value;
@@ -1860,6 +1933,19 @@ class JarvisApp {
     }
 
     exportToPDF() {
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            alert('PDF library not loaded. Please check your internet connection and reload the page.');
+            return;
+        }
+        try {
+            this._generatePDF();
+        } catch (err) {
+            console.error('PDF export failed:', err);
+            alert('PDF export failed: ' + err.message);
+        }
+    }
+
+    _generatePDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const pw = doc.internal.pageSize.getWidth();
@@ -1918,10 +2004,12 @@ class JarvisApp {
         };
 
         // === Title Banner ===
+        const patientIdStr = state.patientContext.patient_id || '';
+        const bannerHeight = patientIdStr ? 38 : 32;
         doc.setFillColor(...colors.headerBg);
-        doc.rect(0, 0, pw, 32, 'F');
+        doc.rect(0, 0, pw, bannerHeight, 'F');
         doc.setFillColor(...colors.accent);
-        doc.rect(0, 32, pw, 1, 'F');
+        doc.rect(0, bannerHeight, pw, 1, 'F');
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(18);
         doc.setTextColor(255, 255, 255);
@@ -1933,12 +2021,19 @@ class JarvisApp {
         doc.setFontSize(8);
         doc.setTextColor(...colors.textMuted);
         doc.text(`Generated: ${now.toLocaleDateString()} at ${now.toLocaleTimeString()}`, pw / 2, 28, { align: 'center' });
-        y = 40;
+        if (patientIdStr) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10);
+            doc.setTextColor(...colors.accent);
+            doc.text(`Patient ID: ${patientIdStr}`, pw / 2, 35, { align: 'center' });
+        }
+        y = bannerHeight + 8;
 
         // === Patient Demographics ===
         const ctx = state.patientContext;
         if (ctx && ctx.age) {
             drawSectionHeader('Patient Demographics');
+            if (ctx.patient_id) drawRow([['Patient ID', ctx.patient_id]]);
             drawRow([['Age', `${ctx.age} years`], ['Sex', ctx.sex], ['Setting', ctx.clinical_setting || 'N/A'], ['ASA', ctx.asa || 'N/A']]);
             if (ctx.weight || ctx.height) {
                 drawRow([['Weight', ctx.weight ? `${ctx.weight} kg` : 'N/A'], ['Height', ctx.height ? `${ctx.height} cm` : 'N/A'], ['BMI', ctx.bmi || 'N/A']]);
@@ -2197,10 +2292,11 @@ class JarvisApp {
             doc.text(`Page ${i} of ${totalPages}`, pw - margin, ph - 6, { align: 'right' });
         }
 
+        const patientIdPart = ctx.patient_id ? `${ctx.patient_id}_` : '';
         const patientAge = ctx.age || 'unknown';
         const patientSex = ctx.sex || '';
         const timestamp = now.toISOString().slice(0, 16).replace(/[:T]/g, '-');
-        doc.save(`JarvisOR_Report_${patientAge}${patientSex.charAt(0)}_${timestamp}.pdf`);
+        doc.save(`JarvisOR_Report_${patientIdPart}${patientAge}${patientSex.charAt(0)}_${timestamp}.pdf`);
     }
 
     // ── Critical Overlay ──

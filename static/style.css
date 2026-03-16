@@ -447,6 +447,45 @@ body {
     cursor: pointer;
 }
 
+/* ─── Anesthesia Technique Categories ─── */
+
+.anesthesia-category-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.anesthesia-category {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px 12px;
+}
+
+.anesthesia-cat-header {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.anesthesia-subcat-header {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 10px 0 4px;
+    padding-left: 2px;
+}
+
+.anesthesia-category .checkbox-grid {
+    gap: 4px 16px;
+}
+
 .toggle-row {
     display: flex;
     gap: 16px;
@@ -1521,6 +1560,12 @@ body {
     background: var(--red) !important;
     color: white !important;
     animation: pulse-record 1s infinite;
+}
+
+.btn-voice-active {
+    background: var(--accent-cyan) !important;
+    color: var(--bg-primary) !important;
+    border-radius: 6px;
 }
 
 @keyframes pulse-record {

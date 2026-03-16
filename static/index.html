@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jarvis OR Guardian</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#0a0e17">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🫀</text></svg>">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="Multimodal AI Clinical Monitoring & Decision Support">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.0/dist/jspdf.umd.min.js" crossorigin="anonymous"
+            onerror="var s=document.createElement('script');s.src='https://unpkg.com/jspdf@4.2.0/dist/jspdf.umd.min.js';s.crossOrigin='anonymous';document.head.appendChild(s);"></script>
+</head>
+<body>
+
+<!-- ═══ DISCLAIMER MODAL ═══ -->
+<div id="disclaimer-modal" class="modal disclaimer-modal-wrap">
+    <div class="modal-content disclaimer-modal-content">
+        <div class="disclaimer-header-icon">🫀</div>
+        <h2 class="disclaimer-app-name">Jarvis OR Guardian</h2>
+        <p class="disclaimer-app-tagline">Multimodal AI for Clinical Monitoring &amp; Decision Support — real-time vital sign tracking, trend analysis, clinical alerts, and AI-powered guidance across OR, ICU, ED, PACU, L&amp;D, and procedural sedation settings.</p>
+        <div class="disclaimer-divider"></div>
+        <h3 class="disclaimer-title">Disclaimer</h3>
+        <div class="disclaimer-body">
+            <p>This system is designed for <strong>educational and clinical decision-support purposes only</strong>.</p>
+            <p>It does not replace professional medical judgment or standard clinical monitoring.</p>
+            <p>All patient management decisions must be made by <strong>qualified healthcare professionals</strong> based on their clinical assessment and institutional protocols.</p>
+            <p>The developers assume <strong>no responsibility</strong> for clinical decisions made using this tool.</p>
+        </div>
+        <button id="disclaimer-accept" class="btn btn-primary btn-large">I Understand &mdash; Continue</button>
+    </div>
+</div>
+
+<!-- ═══ CRITICAL ALERT OVERLAY ═══ -->
+<div id="critical-overlay" class="critical-overlay hidden">
+    <div class="critical-content">
+        <div class="critical-icon">🚨</div>
+        <h1>CRITICAL ALERT</h1>
+        <p id="critical-message"></p>
+        <div id="critical-vitals" class="critical-vitals-row"></div>
+        <button id="critical-dismiss" class="btn btn-danger">Acknowledge</button>
+    </div>
+</div>
+
+<!-- ═══ HEADER ═══ -->
+<header class="app-header">
+    <div class="header-left">
+        <span class="logo-icon">🫀</span>
+        <div class="header-titles">
+            <h1>Jarvis OR Guardian</h1>
+            <span class="header-subtitle">AI Clinical Monitoring Copilot</span>
+        </div>
+    </div>
+    <div class="header-right">
+        <div id="connection-dot" class="status-dot dot-disconnected" title="Not connected"></div>
+        <button id="export-pdf-btn" class="btn btn-export hidden" title="Export to PDF">📄 Export PDF</button>
+        <button id="settings-toggle" class="btn btn-icon" title="Settings">⚙️</button>
+    </div>
+</header>
+
+<!-- ═══ ALERT BANNER ═══ -->
+<div id="alert-banner" class="alert-banner alert-none hidden">
+    <span id="alert-icon">✅</span>
+    <span id="alert-text">ALL CLEAR</span>
+    <span id="alert-time"></span>
+</div>
+
+<!-- ═══ SAFETY ALARMS BANNER ═══ -->
+<div id="safety-alarms-bar" class="safety-alarms-bar hidden">
+    <div id="safety-alarms-list" class="safety-alarms-list"></div>
+</div>
+
+<!-- ═══ SETUP PANEL (Page 1) ═══ -->
+<section id="setup-panel" class="setup-panel hidden">
+    <div class="setup-card setup-card-wide">
+        <div class="setup-header">
+            <span class="setup-icon">🫀</span>
+            <h2>Jarvis OR Guardian</h2>
+            <p class="setup-subtitle">Patient Context &amp; Baseline Setup</p>
+        </div>
+
+        <!-- API Key -->
+        <div class="setup-section">
+            <label class="field-label">Gemini API Key</label>
+            <input type="password" id="api-key" class="input-field" placeholder="Enter your Gemini API key">
+            <span class="field-hint">Required for AI vision and clinical analysis</span>
+        </div>
+
+        <div class="setup-divider"></div>
+
+        <!-- ── 1. Patient Demographics ── -->
+        <div class="form-section">
+            <div class="form-section-header" data-toggle="sec-demographics">
+                <span class="form-section-num">1</span>
+                <h3 class="section-title">Patient Demographics</h3>
+                <span class="form-section-chevron">▾</span>
+            </div>
+            <div class="form-section-body" id="sec-demographics">
+                <div class="setup-field">
+                    <label class="field-label">Patient ID</label>
+                    <input type="text" id="patient-id" class="input-field" placeholder="e.g. MRN, case number, bed number">
+                    <span class="field-hint">For identification only — no patient name required to protect privacy</span>
+                </div>
+                <div class="setup-row">
+                    <div class="setup-field">
+                        <label class="field-label">Age <span class="req">★</span></label>
+                        <input type="number" id="patient-age" class="input-field" placeholder="e.g. 65" min="0" max="120">
+                    </div>
+                    <div class="setup-field">
+                        <label class="field-label">Sex <span class="req">★</span></label>
+                        <select id="patient-sex" class="input-field">
+                            <option value="">Select</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="setup-row">
+                    <div class="setup-field">
+                        <label class="field-label">Weight (kg)</label>
+                        <input type="number" id="patient-weight" class="input-field" placeholder="kg" min="1" max="300">
+                    </div>
+                    <div class="setup-field">
+                        <label class="field-label">Height (cm)</label>
+                        <input type="number" id="patient-height" class="input-field" placeholder="cm" min="30" max="250">
+                    </div>
+                    <div class="setup-field">
+                        <label class="field-label">BMI</label>
+                        <input type="text" id="patient-bmi" class="input-field input-readonly" readonly placeholder="Auto">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 2. Procedure Information ── -->
+        <div class="form-section">
+            <div class="form-section-header" data-toggle="sec-procedure">
+                <span class="form-section-num">2</span>
+                <h3 class="section-title">Procedure Information</h3>
+                <span class="form-section-chevron">▾</span>
+            </div>
+            <div class="form-section-body" id="sec-procedure">
+                <div class="setup-row">
+                    <div class="setup-field">
+                        <label class="field-label">Clinical Setting <span class="req">★</span></label>
+                        <select id="patient-setting" class="input-field">
+                            <option value="">Select</option>
+                            <option value="Operating Room">Operating Room</option>
+                            <option value="ICU">ICU / Critical Care</option>
+                            <option value="Emergency Department">Emergency Department</option>
+                            <option value="PACU">PACU / Recovery</option>
+                            <option value="Labor & Delivery">Labor &amp; Delivery</option>
+                            <option value="Procedural Sedation">Procedural Sedation</option>
+                            <option value="Transport">Transport / Transfer</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="setup-field">
+                    <label class="field-label">Procedure / Surgery / Admission Reason <span class="req">★</span></label>
+                    <input type="text" id="patient-procedure" class="input-field" placeholder="e.g. Total hip replacement, Sepsis management, Trauma resuscitation">
+                </div>
+                <div class="setup-row">
+                    <div class="setup-field">
+                        <label class="field-label">Clinical Specialty</label>
+                        <input type="text" id="patient-specialty" class="input-field" placeholder="e.g. Orthopaedics, Critical Care, Emergency Medicine">
+                    </div>
+                    <div class="setup-field">
+                        <label class="field-label">Elective / Emergency</label>
+                        <select id="patient-urgency" class="input-field">
+                            <option value="">Select</option>
+                            <option value="Elective">Elective</option>
+                            <option value="Emergency">Emergency</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="setup-row">
+                    <div class="setup-field">
+                        <label class="field-label">Expected Duration</label>
+                        <input type="text" id="patient-duration" class="input-field" placeholder="e.g. 2 hours">
+                    </div>
+                    <div class="setup-field">
+                        <label class="field-label">Patient Position</label>
+                        <select id="patient-position" class="input-field">
+                            <option value="">Select</option>
+                            <option value="Supine">Supine</option>
+                            <option value="Prone">Prone</option>
+                            <option value="Lateral">Lateral</option>
+                            <option value="Sitting">Sitting / Upright</option>
+                            <option value="Lithotomy">Lithotomy</option>
+                            <option value="Trendelenburg">Trendelenburg</option>
+                            <option value="Semi-recumbent">Semi-recumbent (ICU)</option>
+                            <option value="Transport">Transport</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 3. Clinical Risk Classification ── -->
+        <div class="form-section">
+            <div class="form-section-header" data-toggle="sec-risk">
+                <span class="form-section-num">3</span>
+                <h3 class="section-title">Clinical Risk Classification</h3>
+                <span class="form-section-chevron">▾</span>
+            </div>
+            <div class="form-section-body" id="sec-risk">
+                <div class="setup-row">
+                    <div class="setup-field">
+                        <label class="field-label">ASA Physical Status</label>
+                        <select id="patient-asa" class="input-field">
+                            <option value="">Select</option>
+                            <option value="ASA I">ASA I — Healthy</option>
+                            <option value="ASA II">ASA II — Mild systemic disease</option>
+                            <option value="ASA III">ASA III — Severe systemic disease</option>
+                            <option value="ASA IV">ASA IV — Life-threatening</option>
+                            <option value="ASA V">ASA V — Moribund</option>
+                            <option value="ASA VI">ASA VI — Brain-dead organ donor</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="setup-field">
+                    <label class="field-label">Primary Diagnosis / Indication</label>
+                    <input type="text" id="patient-diagnosis" class="input-field" placeholder="e.g. Fractured neck of femur">
+                </div>
+                <div class="setup-field">
+                    <label class="field-label">Allergy Status</label>
+                    <input type="text" id="patient-allergies" class="input-field" placeholder="e.g. NKDA, Penicillin allergy">
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 4. Comorbidities ── -->
+        <div class="form-section">
+            <div class="form-section-header" data-toggle="sec-comorbidities">
+                <span class="form-section-num">4</span>
+                <h3 class="section-title">Comorbidities</h3>
+                <span class="form-section-chevron">▾</span>
+            </div>
+            <div class="form-section-body" id="sec-comorbidities">
+                <div class="setup-field">
+                    <label class="field-label">Major Comorbidities Present <span class="req">★</span></label>
+                    <div class="toggle-row">
+                        <label class="toggle-label">
+                            <input type="radio" name="comorbid-toggle" id="comorbid-no" value="no" checked>
+                            <span class="radio-label">No</span>
+                        </label>
+                        <label class="toggle-label">
+                            <input type="radio" name="comorbid-toggle" id="comorbid-yes" value="yes">
+                            <span class="radio-label">Yes</span>
+                        </label>
+                    </div>
+                </div>
+                <div id="comorbid-list" class="checkbox-grid hidden">
+                    <label class="checkbox-label"><input type="checkbox" value="Hypertension"> Hypertension</label>
+                    <label class="checkbox-label"><input type="checkbox" value="Diabetes Mellitus"> Diabetes Mellitus</label>
+                    <label class="checkbox-label"><input type="checkbox" value="Coronary artery disease"> Coronary artery disease</label>
+                    <label class="checkbox-label"><input type="checkbox" value="Heart failure"> Heart failure</label>
+                    <label class="checkbox-label"><input type="checkbox" value="COPD / Asthma"> COPD / Asthma</label>
+                    <label class="checkbox-label"><input type="checkbox" value="Chronic kidney disease"> Chronic kidney disease</label>
+                    <label class="checkbox-label"><input type="checkbox" value="Liver disease"> Liver disease</label>
+                    <label class="checkbox-label"><input type="checkbox" value="Thyroid disorders"> Thyroid disorders</label>
+                    <label class="checkbox-label"><input type="checkbox" value="Obesity"> Obesity</label>
+                    <label class="checkbox-label"><input type="checkbox" value="Obstructive sleep apnea"> Obstructive sleep apnea</label>
+                    <label class="checkbox-label"><input type="checkbox" value="Neurological disorders"> Neurological disorders</label>
+                    <label class="checkbox-label"><input type="checkbox" value="Other"> Other</label>
+                </div>
+                <div id="comorbid-other-field" class="setup-field hidden" style="margin-top:8px">
+                    <input type="text" id="comorbid-other-text" class="input-field" placeholder="Specify other comorbidities">
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 5. Medication Status ── -->
+        <div class="form-section">
+            <div class="form-section-header" data-toggle="sec-medications">
+                <span class="form-section-num">5</span>
+                <h3 class="section-title">Medication Status</h3>
+                <span class="form-section-chevron">▾</span>
+            </div>
+            <div class="form-section-body" id="sec-medications">
+                <div class="setup-field">
+                    <label class="field-label">Medication Controlled</label>
+                    <div class="toggle-row">
+                        <label class="toggle-label">
+                            <input type="radio" name="med-controlled" value="yes">
+                            <span class="radio-label">Yes</span>
+                        </label>
+                        <label class="toggle-label">
+                            <input type="radio" name="med-controlled" value="no">
+                            <span class="radio-label">No</span>
+                        </label>
+                    </div>
+                </div>
+                <div id="med-details" class="hidden">
+                    <div class="setup-field">
+                        <label class="field-label">Important Medications</label>
+                        <div class="checkbox-grid">
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Antihypertensives"> Antihypertensives</label>
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Beta blockers"> Beta blockers</label>
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Anticoagulants / Antiplatelets"> Anticoagulants / Antiplatelets</label>
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Insulin / Oral hypoglycemics"> Insulin / Oral hypoglycemics</label>
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Steroids"> Steroids</label>
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Diuretics"> Diuretics</label>
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Other"> Other</label>
+                        </div>
+                    </div>
+                    <div class="setup-field" style="margin-top:4px">
+                        <input type="text" id="med-other-text" class="input-field" placeholder="Other medications (optional)">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 6. Airway & Anesthesia Context ── -->
+        <div class="form-section">
+            <div class="form-section-header" data-toggle="sec-airway">
+                <span class="form-section-num">6</span>
+                <h3 class="section-title">Airway &amp; Sedation / Anesthesia</h3>
+                <span class="form-section-chevron">▾</span>
+            </div>
+            <div class="form-section-body" id="sec-airway">
+                <div class="setup-field">
+                    <label class="field-label">Anesthesia Technique <span class="req">★</span></label>
+                    <span class="field-hint">Select one or more techniques</span>
+                    <div id="anesthesia-technique-list" class="anesthesia-category-grid">
+
+                        <div class="anesthesia-category">
+                            <h4 class="anesthesia-cat-header">Neuraxial Anesthesia</h4>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Spinal anesthesia"> Spinal anesthesia</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Epidural anesthesia"> Epidural anesthesia</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Combined spinal–epidural anesthesia (CSE)"> Combined spinal–epidural (CSE)</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Segmental spinal anesthesia"> Segmental spinal anesthesia</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Continuous spinal anesthesia"> Continuous spinal anesthesia</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Caudal epidural anesthesia"> Caudal epidural anesthesia</label>
+                            </div>
+                        </div>
+
+                        <div class="anesthesia-category">
+                            <h4 class="anesthesia-cat-header">Peripheral Regional Anesthesia</h4>
+                            <h5 class="anesthesia-subcat-header">Upper Limb Blocks</h5>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Interscalene block"> Interscalene block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Supraclavicular block"> Supraclavicular block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Infraclavicular block"> Infraclavicular block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Axillary block"> Axillary block</label>
+                            </div>
+                            <h5 class="anesthesia-subcat-header">Lower Limb Blocks</h5>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Femoral nerve block"> Femoral nerve block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Sciatic nerve block"> Sciatic nerve block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Popliteal block"> Popliteal block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Adductor canal block"> Adductor canal block</label>
+                            </div>
+                            <h5 class="anesthesia-subcat-header">Truncal / Fascial Plane Blocks</h5>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Transversus abdominis plane (TAP) block"> TAP block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Rectus sheath block"> Rectus sheath block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Paravertebral block"> Paravertebral block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Erector spinae plane block"> Erector spinae plane block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Quadratus lumborum block"> Quadratus lumborum block</label>
+                            </div>
+                            <h5 class="anesthesia-subcat-header">Local Anesthesia</h5>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Local infiltration anesthesia"> Local infiltration anesthesia</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Field block"> Field block</label>
+                            </div>
+                        </div>
+
+                        <div class="anesthesia-category">
+                            <h4 class="anesthesia-cat-header">General Anesthesia</h4>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="General anesthesia with endotracheal tube"> GA with endotracheal tube</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="General anesthesia with LMA"> GA with laryngeal mask airway (LMA)</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Total intravenous anesthesia (TIVA)"> Total intravenous anesthesia (TIVA)</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Balanced general anesthesia"> Balanced general anesthesia</label>
+                            </div>
+                        </div>
+
+                        <div class="anesthesia-category">
+                            <h4 class="anesthesia-cat-header">Sedation / Monitored Anesthesia Care</h4>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Minimal sedation"> Minimal sedation</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Moderate sedation"> Moderate sedation</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Deep sedation"> Deep sedation</label>
+                            </div>
+                        </div>
+
+                        <div class="anesthesia-category">
+                            <h4 class="anesthesia-cat-header">Combined Techniques</h4>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Regional anesthesia with sedation"> Regional anesthesia with sedation</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="General anesthesia with regional block"> General anesthesia with regional block</label>
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" value="Spinal anesthesia with sedation"> Spinal anesthesia with sedation</label>
+                            </div>
+                        </div>
+
+                        <div class="anesthesia-category">
+                            <h4 class="anesthesia-cat-header">Other</h4>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-label"><input type="checkbox" name="anesthesia-technique" id="anesthesia-other-cb" value="Other"> Other anesthesia technique</label>
+                            </div>
+                            <div id="anesthesia-other-field" class="setup-field hidden" style="margin-top:8px">
+                                <input type="text" id="anesthesia-other-text" class="input-field" placeholder="Please specify other technique">
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+                <div class="setup-row">
+                    <div class="setup-field">
+                        <label class="field-label">Airway Assessment</label>
+                        <input type="text" id="patient-airway-assessment" class="input-field" placeholder="e.g. Mallampati II">
+                    </div>
+                    <div class="setup-field">
+                        <label class="field-label">Anticipated Difficult Airway</label>
+                        <select id="patient-difficult-airway" class="input-field">
+                            <option value="No">No</option>
+                            <option value="Yes">Yes</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 7. Monitoring Plan ── -->
+        <div class="form-section">
+            <div class="form-section-header" data-toggle="sec-monitoring">
+                <span class="form-section-num">7</span>
+                <h3 class="section-title">Monitoring Plan</h3>
+                <span class="form-section-chevron">▾</span>
+            </div>
+            <div class="form-section-body" id="sec-monitoring">
+                <div class="checkbox-grid">
+                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="Standard monitoring" checked> Standard monitoring</label>
+                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="Arterial line"> Arterial line</label>
+                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="Central venous line"> Central venous line</label>
+                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="Cardiac output monitoring"> Cardiac output monitoring</label>
+                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="BIS / Depth of sedation"> BIS / Depth of sedation</label>
+                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="Urine output monitoring"> Urine output monitoring</label>
+                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="ICP monitoring"> ICP monitoring</label>
+                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="Continuous EEG"> Continuous EEG</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 8. Baseline Physiological Parameters ── -->
+        <div class="form-section">
+            <div class="form-section-header" data-toggle="sec-baseline">
+                <span class="form-section-num">8</span>
+                <h3 class="section-title">Baseline Physiological Parameters</h3>
+                <span class="form-section-chevron">▾</span>
+            </div>
+            <div class="form-section-body" id="sec-baseline">
+                <div class="baseline-grid">
+                    <div class="baseline-item">
+                        <label class="field-label">HR (bpm) <span class="req">★</span></label>
+                        <input type="number" id="base-hr" class="input-field" placeholder="e.g. 72" min="30" max="200">
+                    </div>
+                    <div class="baseline-item">
+                        <label class="field-label">SBP (mmHg) <span class="req">★</span></label>
+                        <input type="number" id="base-sbp" class="input-field" placeholder="e.g. 130" min="50" max="250">
+                    </div>
+                    <div class="baseline-item">
+                        <label class="field-label">DBP (mmHg) <span class="req">★</span></label>
+                        <input type="number" id="base-dbp" class="input-field" placeholder="e.g. 80" min="20" max="150">
+                    </div>
+                    <div class="baseline-item">
+                        <label class="field-label">SpO₂ (%) <span class="req">★</span></label>
+                        <input type="number" id="base-spo2" class="input-field" placeholder="e.g. 99" min="70" max="100">
+                    </div>
+                    <div class="baseline-item">
+                        <label class="field-label">RR (/min)</label>
+                        <input type="number" id="base-rr" class="input-field" placeholder="e.g. 14" min="4" max="50">
+                    </div>
+                    <div class="baseline-item">
+                        <label class="field-label">Temp (°C)</label>
+                        <input type="number" id="base-temp" class="input-field" placeholder="e.g. 36.5" min="30" max="42" step="0.1">
+                    </div>
+                    <div class="baseline-item">
+                        <label class="field-label">EtCO₂ (mmHg)</label>
+                        <input type="number" id="base-etco2" class="input-field" placeholder="e.g. 35" min="10" max="80">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 9. Trend Analysis Settings ── -->
+        <div class="form-section">
+            <div class="form-section-header" data-toggle="sec-trend">
+                <span class="form-section-num">9</span>
+                <h3 class="section-title">Trend Analysis Settings</h3>
+                <span class="form-section-chevron">▾</span>
+            </div>
+            <div class="form-section-body" id="sec-trend">
+                <div class="setup-field">
+                    <label class="field-label">Trend Window Size <span class="req">★</span></label>
+                    <select id="trend-window" class="input-field">
+                        <option value="5">2–5 minutes (short-term detection)</option>
+                        <option value="10" selected>5–10 minutes (medium trend)</option>
+                        <option value="20">10–20 minutes (long trend)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 10. Optional Context ── -->
+        <div class="form-section">
+            <div class="form-section-header" data-toggle="sec-optional">
+                <span class="form-section-num">10</span>
+                <h3 class="section-title">Optional Context</h3>
+                <span class="form-section-chevron">▾</span>
+            </div>
+            <div class="form-section-body" id="sec-optional">
+                <div class="setup-row">
+                    <div class="setup-field">
+                        <label class="field-label">Pregnancy Status</label>
+                        <select id="patient-pregnancy" class="input-field">
+                            <option value="N/A">N/A</option>
+                            <option value="Not pregnant">Not pregnant</option>
+                            <option value="Pregnant">Pregnant</option>
+                        </select>
+                    </div>
+                    <div class="setup-field">
+                        <label class="field-label">Fasting Status (NPO hours)</label>
+                        <input type="number" id="patient-npo" class="input-field" placeholder="Hours" min="0" max="72">
+                    </div>
+                </div>
+                <div class="setup-row">
+                    <div class="setup-field">
+                        <label class="field-label">Blood Group</label>
+                        <select id="patient-blood-group" class="input-field">
+                            <option value="">Select</option>
+                            <option>A+</option><option>A-</option>
+                            <option>B+</option><option>B-</option>
+                            <option>AB+</option><option>AB-</option>
+                            <option>O+</option><option>O-</option>
+                        </select>
+                    </div>
+                    <div class="setup-field">
+                        <label class="field-label">Blood Products Available</label>
+                        <select id="patient-blood-products" class="input-field">
+                            <option value="">Select</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                            <option value="Arranged">Arranged</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="setup-row">
+                    <div class="setup-field">
+                        <label class="field-label">ICU / HDU Planned</label>
+                        <select id="patient-icu" class="input-field">
+                            <option value="No">No</option>
+                            <option value="ICU">ICU</option>
+                            <option value="HDU">HDU</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="setup-field">
+                    <label class="field-label">Special Precautions / Notes</label>
+                    <textarea id="patient-notes" class="input-field textarea" rows="2" placeholder="Any special precautions or notes"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Submit ── -->
+        <div class="setup-submit">
+            <p class="setup-req-note"><span class="req">★</span> Required fields</p>
+            <button id="start-monitoring" class="btn btn-primary btn-large">
+                Start Monitoring →
+            </button>
+            <p class="disclaimer">
+                Educational clinical decision support prototype. Not FDA-cleared. Not for autonomous medical decisions.
+            </p>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ MAIN DASHBOARD (Page 2 — Clinical Monitoring) ═══ -->
+<main id="dashboard" class="dashboard hidden">
+
+    <!-- ── Top Row: Camera + Vitals ── -->
+    <div class="dash-top">
+
+        <!-- Camera Panel -->
+        <section class="panel camera-panel">
+            <div class="panel-header">
+                <h3>📹 Vision Monitor</h3>
+                <div class="camera-status">
+                    <span id="camera-status-text">Camera Off</span>
+                    <span id="camera-status-dot" class="status-dot dot-off"></span>
+                </div>
+            </div>
+            <div class="camera-viewport" id="camera-viewport">
+                <video id="camera-feed" autoplay playsinline muted></video>
+                <canvas id="capture-canvas"></canvas>
+                <div id="camera-placeholder" class="camera-placeholder">
+                    <span>📷</span>
+                    <p>Camera feed will appear here</p>
+                </div>
+                <div id="capture-flash" class="capture-flash"></div>
+                <div id="roi-overlay" class="roi-overlay hidden">
+                    <div id="roi-box" class="roi-box">
+                        <span class="roi-label">Align monitor here</span>
+                        <div class="roi-handle roi-handle-nw" data-dir="nw"></div>
+                        <div class="roi-handle roi-handle-ne" data-dir="ne"></div>
+                        <div class="roi-handle roi-handle-sw" data-dir="sw"></div>
+                        <div class="roi-handle roi-handle-se" data-dir="se"></div>
+                    </div>
+                </div>
+                <div id="sim-badge" class="sim-badge hidden">SIM</div>
+            </div>
+            <div class="camera-controls">
+                <button id="camera-toggle" class="btn btn-secondary">📷 Start Camera</button>
+                <button id="capture-btn" class="btn btn-primary" disabled>📸 Capture</button>
+                <button id="preflight-btn" class="btn btn-outline" disabled>🔍 Pre-flight</button>
+                <label class="toggle-label roi-toggle-label">
+                    <input type="checkbox" id="roi-toggle" checked>
+                    <span class="toggle-slider"></span>
+                    ROI
+                </label>
+            </div>
+            <div class="auto-capture-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="auto-capture-toggle">
+                    <span class="toggle-slider"></span>
+                    Auto-capture
+                </label>
+                <select id="capture-interval" class="select-field">
+                    <option value="3000" selected>3s</option>
+                    <option value="5000">5s</option>
+                    <option value="10000">10s</option>
+                    <option value="15000">15s</option>
+                    <option value="30000">30s</option>
+                    <option value="60000">1m</option>
+                    <option value="300000">5m</option>
+                </select>
+                <span id="auto-capture-status" class="auto-status"></span>
+            </div>
+            <div class="upload-fallback">
+                <label class="upload-label" for="upload-image">
+                    Or upload a monitor screenshot
+                </label>
+                <input type="file" id="upload-image" accept="image/*" class="file-input">
+            </div>
+            <input type="file" id="sim-video-input" accept="video/*" class="file-input" style="display:none">
+        </section>
+
+        <!-- Vitals Panel -->
+        <section class="panel vitals-panel">
+            <div class="panel-header">
+                <h3>📊 Vitals</h3>
+                <span id="vitals-timestamp" class="timestamp"></span>
+            </div>
+            <div class="vitals-grid">
+                <div class="vital-card vital-hr" id="v-hr">
+                    <div class="vital-label">HR</div>
+                    <div class="vital-value" id="val-hr">--</div>
+                    <div class="vital-unit">bpm</div>
+                </div>
+                <div class="vital-card vital-spo2" id="v-spo2">
+                    <div class="vital-label">SpO₂</div>
+                    <div class="vital-value" id="val-spo2">--</div>
+                    <div class="vital-unit">%</div>
+                </div>
+                <div class="vital-card vital-bp" id="v-bp">
+                    <div class="vital-label">NIBP</div>
+                    <div class="vital-value" id="val-bp">--/--</div>
+                    <div class="vital-unit">mmHg</div>
+                </div>
+                <div class="vital-card vital-map" id="v-map">
+                    <div class="vital-label">MAP</div>
+                    <div class="vital-value" id="val-map">--</div>
+                    <div class="vital-unit">mmHg</div>
+                </div>
+                <div class="vital-card vital-etco2" id="v-etco2">
+                    <div class="vital-label">EtCO₂</div>
+                    <div class="vital-value" id="val-etco2">--</div>
+                    <div class="vital-unit">mmHg</div>
+                </div>
+                <div class="vital-card vital-rr" id="v-rr">
+                    <div class="vital-label">RR</div>
+                    <div class="vital-value" id="val-rr">--</div>
+                    <div class="vital-unit">/min</div>
+                </div>
+                <div class="vital-card vital-temp" id="v-temp">
+                    <div class="vital-label">Temp</div>
+                    <div class="vital-value" id="val-temp">--</div>
+                    <div class="vital-unit">°C</div>
+                </div>
+                <div class="vital-card vital-si" id="v-si">
+                    <div class="vital-label">Shock Index</div>
+                    <div class="vital-value" id="val-si">--</div>
+                    <div class="vital-unit">HR÷SBP</div>
+                </div>
+            </div>
+
+            <!-- Waveform Assessment -->
+            <div id="waveform-section" class="waveform-section hidden">
+                <h4>📈 Waveforms</h4>
+                <div id="waveform-items"></div>
+            </div>
+
+            <!-- Trajectory Badge -->
+            <div class="trajectory-row">
+                <div class="trajectory-badge" id="trajectory-badge">
+                    <span id="trajectory-icon">⚪</span>
+                    <span id="trajectory-text">Awaiting data</span>
+                </div>
+                <div class="reading-count">
+                    <span id="reading-count">0</span> readings
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ── Manual Data Entry (fallback when camera not available) ── -->
+    <section class="panel manual-entry-panel">
+        <div class="panel-header panel-header-collapse" id="manual-entry-header">
+            <h3>✏️ Manual Vitals Entry</h3>
+            <span class="panel-note">Use when camera is not available</span>
+            <span class="collapse-chevron" id="manual-collapse-chevron">▸</span>
+        </div>
+        <div id="manual-entry-body" class="manual-entry-body hidden">
+            <div class="manual-section">
+                <h4>Core Vitals</h4>
+                <div class="manual-grid">
+                    <div class="manual-field">
+                        <label class="field-label">HR (bpm) <span class="req">★</span></label>
+                        <input type="number" id="manual-hr" class="input-field" placeholder="72" min="20" max="250">
+                    </div>
+                    <div class="manual-field">
+                        <label class="field-label">SBP (mmHg) <span class="req">★</span></label>
+                        <input type="number" id="manual-sbp" class="input-field" placeholder="120" min="30" max="280">
+                    </div>
+                    <div class="manual-field">
+                        <label class="field-label">DBP (mmHg) <span class="req">★</span></label>
+                        <input type="number" id="manual-dbp" class="input-field" placeholder="80" min="10" max="180">
+                    </div>
+                    <div class="manual-field">
+                        <label class="field-label">SpO₂ (%) <span class="req">★</span></label>
+                        <input type="number" id="manual-spo2" class="input-field" placeholder="98" min="50" max="100">
+                    </div>
+                    <div class="manual-field">
+                        <label class="field-label">EtCO₂ (mmHg) <span class="req">★</span></label>
+                        <input type="number" id="manual-etco2" class="input-field" placeholder="35" min="5" max="100">
+                    </div>
+                    <div class="manual-field">
+                        <label class="field-label">RR (/min) <span class="req">★</span></label>
+                        <input type="number" id="manual-rr" class="input-field" placeholder="14" min="2" max="60">
+                    </div>
+                    <div class="manual-field">
+                        <label class="field-label">Temp (°C)</label>
+                        <input type="number" id="manual-temp" class="input-field" placeholder="36.5" min="28" max="44" step="0.1">
+                    </div>
+                </div>
+            </div>
+            <div class="manual-section">
+                <h4>Respiratory / Ventilation (if available)</h4>
+                <div class="manual-grid">
+                    <div class="manual-field">
+                        <label class="field-label">FiO₂ (%)</label>
+                        <input type="number" id="manual-fio2" class="input-field" placeholder="40" min="21" max="100">
+                    </div>
+                    <div class="manual-field">
+                        <label class="field-label">Tidal Volume (ml)</label>
+                        <input type="number" id="manual-tv" class="input-field" placeholder="500" min="50" max="1500">
+                    </div>
+                    <div class="manual-field">
+                        <label class="field-label">Peak Airway Pressure (cmH₂O)</label>
+                        <input type="number" id="manual-paw" class="input-field" placeholder="20" min="0" max="60">
+                    </div>
+                    <div class="manual-field">
+                        <label class="field-label">Ventilator Mode</label>
+                        <select id="manual-vent-mode" class="input-field">
+                            <option value="">N/A</option>
+                            <option value="VCV">VCV</option>
+                            <option value="PCV">PCV</option>
+                            <option value="SIMV">SIMV</option>
+                            <option value="PSV">PSV</option>
+                            <option value="CPAP">CPAP</option>
+                            <option value="Manual">Manual</option>
+                        </select>
+                    </div>
+                    <div class="manual-field">
+                        <label class="field-label">Minute Ventilation (L/min)</label>
+                        <input type="number" id="manual-mv" class="input-field" placeholder="6" min="0" max="30" step="0.1">
+                    </div>
+                </div>
+            </div>
+            <div class="manual-derived">
+                <span><strong>MAP:</strong> <span id="manual-map-calc">--</span> mmHg</span>
+                <span><strong>Shock Index:</strong> <span id="manual-si-calc">--</span></span>
+            </div>
+            <button id="manual-submit" class="btn btn-primary">Submit Vitals Reading</button>
+        </div>
+    </section>
+
+    <!-- ── Trend Charts ── -->
+    <div class="trends-row">
+        <section class="panel trend-panel">
+            <div class="panel-header">
+                <h3>❤️ Hemodynamic Trend</h3>
+                <div class="trend-controls">
+                    <button id="clear-trends" class="btn btn-small btn-outline">Clear All</button>
+                </div>
+            </div>
+            <div class="chart-container"><canvas id="hemo-chart"></canvas></div>
+        </section>
+        <section class="panel trend-panel">
+            <div class="panel-header">
+                <h3>🫁 Respiratory Trend</h3>
+            </div>
+            <div class="chart-container"><canvas id="resp-chart"></canvas></div>
+        </section>
+    </div>
+    <div class="trends-row">
+        <section class="panel trend-panel">
+            <div class="panel-header">
+                <h3>🌡️ Temperature Trend</h3>
+            </div>
+            <div class="chart-container chart-container-sm"><canvas id="temp-chart"></canvas></div>
+        </section>
+        <section class="panel trend-panel">
+            <div class="panel-header">
+                <h3>💧 Fluid Balance &amp; Shock Index</h3>
+            </div>
+            <div class="chart-container chart-container-sm"><canvas id="fluid-si-chart"></canvas></div>
+        </section>
+    </div>
+    <div id="trend-deltas" class="trend-deltas hidden"></div>
+
+    <!-- ── Fluid Balance + Drug Administration ── -->
+    <div class="dash-mid">
+        <section class="panel fluid-panel">
+            <div class="panel-header">
+                <h3>💧 Fluid Balance</h3>
+            </div>
+            <div class="fluid-body">
+                <div class="fluid-input-grid">
+                    <div class="fluid-input-item">
+                        <label class="field-label">Est. Blood Loss (ml) <span class="req">★</span></label>
+                        <div class="fluid-input-row">
+                            <input type="number" id="fluid-ebl" class="input-field" placeholder="0" min="0">
+                            <button class="btn btn-small btn-secondary" id="fluid-ebl-btn">Update</button>
+                        </div>
+                    </div>
+                    <div class="fluid-input-item">
+                        <label class="field-label">IV Fluids Given (ml) <span class="req">★</span></label>
+                        <div class="fluid-input-row">
+                            <input type="number" id="fluid-ivf" class="input-field" placeholder="0" min="0">
+                            <button class="btn btn-small btn-secondary" id="fluid-ivf-btn">Update</button>
+                        </div>
+                    </div>
+                    <div class="fluid-input-item">
+                        <label class="field-label">Blood Transfusion (ml)</label>
+                        <div class="fluid-input-row">
+                            <input type="number" id="fluid-blood" class="input-field" placeholder="0" min="0">
+                            <button class="btn btn-small btn-secondary" id="fluid-blood-btn">Update</button>
+                        </div>
+                    </div>
+                    <div class="fluid-input-item">
+                        <label class="field-label">Urine Output (ml)</label>
+                        <div class="fluid-input-row">
+                            <input type="number" id="fluid-urine" class="input-field" placeholder="0" min="0">
+                            <button class="btn btn-small btn-secondary" id="fluid-urine-btn">Update</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="fluid-summary">
+                    <div class="fluid-summary-item fluid-loss">
+                        <span class="fluid-summary-label">Total Loss</span>
+                        <span class="fluid-summary-value" id="fluid-total-loss">0 ml</span>
+                    </div>
+                    <div class="fluid-summary-item fluid-input-total">
+                        <span class="fluid-summary-label">Total Input</span>
+                        <span class="fluid-summary-value" id="fluid-total-input">0 ml</span>
+                    </div>
+                    <div class="fluid-summary-item fluid-balance-val">
+                        <span class="fluid-summary-label">Net Balance</span>
+                        <span class="fluid-summary-value" id="fluid-net-balance">0 ml</span>
+                    </div>
+                </div>
+                <div id="fluid-log" class="fluid-log"></div>
+            </div>
+        </section>
+
+        <section class="panel drug-panel">
+            <div class="panel-header">
+                <h3>💊 Drug Administration Log</h3>
+            </div>
+            <div class="drug-body">
+                <div class="drug-entry-form">
+                    <div class="drug-entry-row">
+                        <select id="drug-category" class="input-field">
+                            <option value="">Category</option>
+                            <option value="Vasopressor">Vasopressor</option>
+                            <option value="Inotrope">Inotrope</option>
+                            <option value="Sedative">Sedative</option>
+                            <option value="Muscle Relaxant">Muscle Relaxant</option>
+                            <option value="Analgesic">Analgesic</option>
+                            <option value="Antibiotic">Antibiotic</option>
+                            <option value="IV Fluid / Colloid">IV Fluid / Colloid</option>
+                            <option value="Blood Product">Blood Product</option>
+                            <option value="Local Anesthetic">Local Anesthetic</option>
+                            <option value="Antiemetic">Antiemetic</option>
+                            <option value="Reversal Agent">Reversal Agent</option>
+                            <option value="Other">Other</option>
+                        </select>
+                        <input type="text" id="drug-name" class="input-field" placeholder="Drug name">
+                    </div>
+                    <div class="drug-entry-row">
+                        <input type="text" id="drug-dose" class="input-field" placeholder="Dose (e.g. 100mg)">
+                        <input type="text" id="drug-route" class="input-field" placeholder="Route (IV, IM, etc.)">
+                        <button id="drug-log-btn" class="btn btn-primary btn-small">Log Drug</button>
+                    </div>
+                </div>
+                <div id="drug-log-list" class="drug-log-list">
+                    <p class="events-empty">No drugs logged yet</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ── Clinical Insight Card ── -->
+    <section id="clinical-card" class="panel clinical-card hidden">
+        <div class="panel-header">
+            <h3 id="card-alert-label">📋 Clinical Insight</h3>
+            <span id="card-timestamp" class="timestamp"></span>
+        </div>
+        <div id="card-trend" class="card-section hidden">
+            <h4>📉 Trend Interpretation</h4>
+            <p id="card-trend-text"></p>
+        </div>
+        <div id="card-physio" class="card-section hidden">
+            <h4>🧬 Physiological Explanation</h4>
+            <p id="card-physio-text"></p>
+        </div>
+        <div id="card-differentials" class="card-section hidden">
+            <h4>🔍 Differential Diagnosis</h4>
+            <ol id="card-diff-list"></ol>
+        </div>
+        <div id="card-checks" class="card-section hidden">
+            <h4>✅ Immediate Checks</h4>
+            <div id="card-checks-list"></div>
+        </div>
+        <div id="card-actions" class="card-section hidden">
+            <h4>💡 Suggested Actions</h4>
+            <div id="card-actions-list"></div>
+        </div>
+        <div id="card-alarms" class="card-section hidden">
+            <h4>🔔 Alarms Visible</h4>
+            <div id="card-alarms-list"></div>
+        </div>
+        <div id="card-quality" class="card-quality hidden">
+            <span>📷</span> <span id="card-quality-text"></span>
+        </div>
+    </section>
+
+    <!-- ── Alarm / Safety Panel ── -->
+    <section class="panel alarm-panel">
+        <div class="panel-header panel-header-collapse" id="alarm-panel-header">
+            <h3>🚨 Alarm &amp; Safety System</h3>
+            <span class="collapse-chevron" id="alarm-collapse-chevron">▾</span>
+        </div>
+        <div id="alarm-panel-body">
+            <div id="active-alarms" class="active-alarms">
+                <p class="events-empty">No active alarms</p>
+            </div>
+            <div class="alarm-thresholds">
+                <h4>Alarm Thresholds</h4>
+                <div class="alarm-grid">
+                    <div class="alarm-item">
+                        <label>MAP &lt;</label>
+                        <input type="number" id="alarm-map-low" class="input-field" value="65" min="30" max="100">
+                        <span>mmHg</span>
+                    </div>
+                    <div class="alarm-item">
+                        <label>SpO₂ &lt;</label>
+                        <input type="number" id="alarm-spo2-low" class="input-field" value="92" min="60" max="100">
+                        <span>%</span>
+                    </div>
+                    <div class="alarm-item">
+                        <label>EtCO₂ &lt;</label>
+                        <input type="number" id="alarm-etco2-low" class="input-field" value="25" min="5" max="50">
+                        <span>mmHg</span>
+                    </div>
+                    <div class="alarm-item">
+                        <label>EtCO₂ &gt;</label>
+                        <input type="number" id="alarm-etco2-high" class="input-field" value="50" min="30" max="80">
+                        <span>mmHg</span>
+                    </div>
+                    <div class="alarm-item">
+                        <label>HR &lt;</label>
+                        <input type="number" id="alarm-hr-low" class="input-field" value="45" min="20" max="80">
+                        <span>bpm</span>
+                    </div>
+                    <div class="alarm-item">
+                        <label>HR &gt;</label>
+                        <input type="number" id="alarm-hr-high" class="input-field" value="130" min="80" max="200">
+                        <span>bpm</span>
+                    </div>
+                    <div class="alarm-item">
+                        <label>Shock Index &gt;</label>
+                        <input type="number" id="alarm-si-high" class="input-field" value="0.9" min="0.5" max="2" step="0.1">
+                        <span></span>
+                    </div>
+                    <div class="alarm-item">
+                        <label>Temp &gt;</label>
+                        <input type="number" id="alarm-temp-high" class="input-field" value="38.5" min="36" max="42" step="0.1">
+                        <span>°C</span>
+                    </div>
+                    <div class="alarm-item">
+                        <label>Temp &lt;</label>
+                        <input type="number" id="alarm-temp-low" class="input-field" value="35" min="28" max="37" step="0.1">
+                        <span>°C</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── Bottom: Clinical Events + Chat ── -->
+    <div class="dash-bottom">
+
+        <!-- Clinical Events (Enhanced) -->
+        <section class="panel events-panel">
+            <div class="panel-header">
+                <h3>📋 Clinical Events Timeline</h3>
+            </div>
+            <div class="events-quick-section">
+                <div class="quick-category">
+                    <h4>Airway / Anesthesia / Sedation</h4>
+                    <div class="quick-btn-row">
+                        <button class="quick-event-btn" data-event="Induction of anesthesia">★ Induction</button>
+                        <button class="quick-event-btn" data-event="Intubation">★ Intubation</button>
+                        <button class="quick-event-btn" data-event="Spinal anesthesia">Spinal</button>
+                        <button class="quick-event-btn" data-event="Epidural dose">Epidural</button>
+                        <button class="quick-event-btn" data-event="Regional block">Regional Block</button>
+                        <button class="quick-event-btn" data-event="Sedation started">Sedation Start</button>
+                        <button class="quick-event-btn" data-event="Ventilator changes">Vent Change</button>
+                        <button class="quick-event-btn" data-event="Extubation">Extubation</button>
+                        <button class="quick-event-btn" data-event="Weaning trial">Weaning Trial</button>
+                    </div>
+                </div>
+                <div class="quick-category">
+                    <h4>Surgical / Procedural Events</h4>
+                    <div class="quick-btn-row">
+                        <button class="quick-event-btn" data-event="Surgical incision">★ Incision</button>
+                        <button class="quick-event-btn" data-event="Tourniquet inflation">Tourniquet On</button>
+                        <button class="quick-event-btn" data-event="Tourniquet release">Tourniquet Off</button>
+                        <button class="quick-event-btn" data-event="Laparoscopy insufflation">Insufflation</button>
+                        <button class="quick-event-btn" data-event="Major surgical manipulation">Major Manipulation</button>
+                        <button class="quick-event-btn" data-event="Organ clamping">Clamping</button>
+                        <button class="quick-event-btn" data-event="Reperfusion">Reperfusion</button>
+                        <button class="quick-event-btn" data-event="Procedure started">Procedure Start</button>
+                        <button class="quick-event-btn" data-event="Procedure completed">Procedure End</button>
+                    </div>
+                </div>
+                <div class="quick-category">
+                    <h4>Critical Clinical Events</h4>
+                    <div class="quick-btn-row">
+                        <button class="quick-event-btn quick-event-critical" data-event="Bleeding episode">★ Bleeding</button>
+                        <button class="quick-event-btn quick-event-critical" data-event="Hypotension episode">Hypotension</button>
+                        <button class="quick-event-btn quick-event-critical" data-event="Desaturation episode">Desaturation</button>
+                        <button class="quick-event-btn quick-event-critical" data-event="Arrhythmia">Arrhythmia</button>
+                        <button class="quick-event-btn quick-event-critical" data-event="Airway difficulty">Airway Difficulty</button>
+                        <button class="quick-event-btn quick-event-critical" data-event="Cardiac arrest">Cardiac Arrest</button>
+                        <button class="quick-event-btn quick-event-critical" data-event="Seizure">Seizure</button>
+                        <button class="quick-event-btn quick-event-critical" data-event="Respiratory failure">Resp Failure</button>
+                    </div>
+                </div>
+                <div class="quick-category">
+                    <h4>ICU / ED / PACU Events</h4>
+                    <div class="quick-btn-row">
+                        <button class="quick-event-btn" data-event="Patient admission">Admission</button>
+                        <button class="quick-event-btn" data-event="Patient transfer">Transfer</button>
+                        <button class="quick-event-btn" data-event="Patient discharge">Discharge</button>
+                        <button class="quick-event-btn" data-event="Position change">Position Change</button>
+                        <button class="quick-event-btn" data-event="Line / catheter insertion">Line Inserted</button>
+                        <button class="quick-event-btn" data-event="Line / catheter removal">Line Removed</button>
+                        <button class="quick-event-btn" data-event="Nursing handover">Handover</button>
+                        <button class="quick-event-btn" data-event="Code Blue activated">Code Blue</button>
+                    </div>
+                </div>
+                <div class="quick-category">
+                    <h4>Infection / Sepsis</h4>
+                    <div class="quick-btn-row">
+                        <button class="quick-event-btn quick-event-warn" data-event="Temperature rise — infection suspected">Temp Rise</button>
+                        <button class="quick-event-btn quick-event-warn" data-event="Suspicion of infection">Infection Suspected</button>
+                        <button class="quick-event-btn quick-event-warn" data-event="Sepsis event">Sepsis Event</button>
+                        <button class="quick-event-btn quick-event-warn" data-event="Antibiotics administered">Antibiotics Given</button>
+                        <button class="quick-event-btn quick-event-warn" data-event="Cultures sent">Cultures Sent</button>
+                    </div>
+                </div>
+            </div>
+            <div class="event-input-row">
+                <input type="text" id="event-input" class="input-field" placeholder="Custom event (e.g. 250ml bolus given)…">
+                <button id="event-log" class="btn btn-secondary">Log</button>
+            </div>
+            <div id="events-list" class="events-list">
+                <p class="events-empty">No events logged yet</p>
+            </div>
+        </section>
+
+        <!-- Chat Panel -->
+        <section class="panel chat-panel">
+            <div class="panel-header">
+                <h3>💬 Copilot Chat</h3>
+            </div>
+            <div id="chat-messages" class="chat-messages">
+                <div class="chat-msg assistant">
+                    <div class="chat-bubble">Jarvis online. Monitoring vitals and ready to assist. Ask me anything about the patient or clinical situation.</div>
+                </div>
+            </div>
+            <div class="chat-input-row">
+                <button id="voice-btn" class="btn btn-icon" title="Start/stop Gemini Live voice session">🎤</button>
+                <button id="voice-output-btn" class="btn btn-icon" title="Toggle voice output (read responses aloud via Gemini)">🔇</button>
+                <input type="text" id="chat-input" class="input-field" placeholder="Ask Jarvis anything…">
+                <button id="chat-send" class="btn btn-primary">Send</button>
+            </div>
+        </section>
+    </div>
+
+    <!-- ── Clinical Risk Prediction ── -->
+    <section class="panel postop-panel" id="postop-panel">
+        <div class="panel-header">
+            <h3>📊 Clinical Risk Prediction</h3>
+            <button id="postop-calculate" class="btn btn-small btn-outline">Calculate Risk</button>
+        </div>
+        <div id="postop-body" class="postop-body">
+            <p class="events-empty">Click "Calculate Risk" after sufficient monitoring data is available.</p>
+        </div>
+    </section>
+
+    <!-- Preflight Result Modal -->
+    <div id="preflight-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>📷 Pre-flight Camera Check</h3>
+            <div id="preflight-result"></div>
+            <button id="preflight-close" class="btn btn-primary">Close</button>
+        </div>
+    </div>
+
+</main>
+
+<!-- ═══ FOOTER ═══ -->
+<footer class="app-footer">
+    <div class="footer-left">
+        <a href="https://www.linkedin.com/in/dr-bhavna-gupta" target="_blank" rel="noopener"><strong>Dr Bhavna Gupta</strong></a> · Consultant Anaesthesiologist &amp; Intensivist
+        &nbsp;|&nbsp;
+        <a href="https://www.linkedin.com/in/gaaush/" target="_blank" rel="noopener"><strong>Aayush Gupta</strong></a> · Staff Data Scientist
+    </div>
+    <div class="footer-right">
+        Prototype for research &amp; education · Not FDA-cleared
+    </div>
+</footer>
+
+<!-- ═══ SETTINGS DRAWER ═══ -->
+<div id="settings-drawer" class="settings-drawer hidden">
+    <div class="settings-content">
+        <div class="settings-header">
+            <h3>⚙️ Settings</h3>
+            <button id="settings-close" class="btn btn-icon">✕</button>
+        </div>
+        <div class="settings-body">
+            <div class="setup-field">
+                <label class="field-label">Gemini API Key</label>
+                <input type="password" id="settings-api-key" class="input-field" placeholder="Update API key">
+            </div>
+            <div class="setup-field">
+                <label class="field-label">Trend Window Size</label>
+                <input type="number" id="settings-window" class="input-field" value="10" min="3" max="30">
+            </div>
+            <h4>Patient Context</h4>
+            <div class="setup-field">
+                <label class="field-label">Patient ID</label>
+                <input type="text" id="settings-patient-id" class="input-field">
+            </div>
+            <div class="setup-field">
+                <label class="field-label">Age</label>
+                <input type="number" id="settings-age" class="input-field" min="1" max="120">
+            </div>
+            <div class="setup-field">
+                <label class="field-label">Sex</label>
+                <select id="settings-sex" class="input-field">
+                    <option value="">Select</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                </select>
+            </div>
+            <div class="setup-field">
+                <label class="field-label">Procedure</label>
+                <input type="text" id="settings-procedure" class="input-field">
+            </div>
+            <div class="setup-field">
+                <label class="field-label">Anesthesia Technique(s)</label>
+                <textarea id="settings-anesthesia" class="input-field textarea" rows="2" readonly></textarea>
+            </div>
+            <div class="setup-field">
+                <label class="field-label">Comorbidities</label>
+                <textarea id="settings-comorbidities" class="input-field textarea" rows="2"></textarea>
+            </div>
+            <div class="setup-field">
+                <label class="field-label">Allergies</label>
+                <input type="text" id="settings-allergies" class="input-field">
+            </div>
+            <h4>Baseline Vitals</h4>
+            <div class="setup-row">
+                <div class="setup-field">
+                    <label class="field-label">HR</label>
+                    <input type="number" id="settings-hr" class="input-field" min="30" max="200">
+                </div>
+                <div class="setup-field">
+                    <label class="field-label">SpO₂</label>
+                    <input type="number" id="settings-spo2" class="input-field" min="70" max="100">
+                </div>
+            </div>
+            <div class="setup-row">
+                <div class="setup-field">
+                    <label class="field-label">SBP</label>
+                    <input type="number" id="settings-sbp" class="input-field" min="50" max="250">
+                </div>
+                <div class="setup-field">
+                    <label class="field-label">DBP</label>
+                    <input type="number" id="settings-dbp" class="input-field" min="20" max="150">
+                </div>
+            </div>
+            <button id="settings-save" class="btn btn-primary">Save Settings</button>
+            <button id="back-to-setup" class="btn btn-outline" style="margin-top:8px">Back to Setup</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

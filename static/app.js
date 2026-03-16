@@ -2305,16 +2305,16 @@ ${this.buildContext()}`;
         let y = margin;
 
         const colors = {
-            headerBg: [10, 14, 23],
-            sectionBg: [21, 29, 46],
-            accent: [59, 130, 246],
-            green: [16, 185, 129],
-            red: [239, 68, 68],
-            orange: [249, 115, 22],
-            textPrimary: [226, 232, 240],
-            textSecondary: [148, 163, 184],
+            headerBg: [30, 58, 138],
+            sectionBg: [239, 246, 255],
+            accent: [30, 64, 175],
+            green: [4, 120, 87],
+            red: [185, 28, 28],
+            orange: [180, 83, 9],
+            textPrimary: [15, 23, 42],
+            textSecondary: [51, 65, 85],
             textMuted: [100, 116, 139],
-            border: [30, 58, 95],
+            border: [203, 213, 225],
         };
 
         const checkPage = (needed) => {
@@ -2464,7 +2464,7 @@ ${this.buildContext()}`;
             displayHistory.forEach((r, idx) => {
                 checkPage(6);
                 if (idx % 2 === 0) {
-                    doc.setFillColor(17, 24, 39);
+                    doc.setFillColor(241, 245, 249);
                     doc.rect(margin, y - 1, contentW, 5.5, 'F');
                 }
                 tx = margin;
@@ -2637,7 +2637,7 @@ ${this.buildContext()}`;
             doc.rect(0, ph - 12, pw, 12, 'F');
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(7);
-            doc.setTextColor(...colors.textMuted);
+            doc.setTextColor(...colors.textSecondary);
             doc.text('Jarvis OR Guardian — Educational clinical decision support prototype. Not FDA-cleared.', pw / 2, ph - 6, { align: 'center' });
             doc.text(`Page ${i} of ${totalPages}`, pw - margin, ph - 6, { align: 'right' });
         }

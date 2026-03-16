@@ -242,6 +242,191 @@ gcloud run deploy jarvis-or \
 
 ---
 
+## Reproducible Testing
+
+### Option A: Use the Live Deployment (Fastest)
+
+The app is deployed and ready to test — no setup required:
+
+**https://jarvis-or-995915388976.us-central1.run.app/**
+
+1. Open the link in Chrome (desktop or mobile)
+2. Click **"I Understand — Continue"** on the disclaimer
+3. Enter your Gemini API key (get one free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey))
+4. Continue to the testing scenarios below
+
+### Option B: Run Locally
+
+```bash
+git clone https://github.com/gaaush/JarvisOR.git
+cd JarvisOR
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port 8000
+```
+
+Open **http://localhost:8000** in Chrome.
+
+### Option C: Run with Docker
+
+```bash
+docker build -t jarvis-or .
+docker run -p 8080:8080 jarvis-or
+```
+
+Open **http://localhost:8080** in Chrome.
+
+### Prerequisites for All Options
+
+- A **Gemini API key** — free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- **Chrome browser** recommended (for camera, Web Audio, and Gemini Live voice support)
+- For camera testing: a phone/tablet camera or a monitor screenshot image
+
+---
+
+### Test Scenario 1: Manual Vitals Entry + Trend Analysis + Alarms (No Camera Needed)
+
+This scenario tests the core clinical monitoring pipeline without requiring a camera or patient monitor.
+
+**Setup (Patient Intake — ~1 min):**
+
+1. Accept the disclaimer → enter your Gemini API key
+2. Fill in patient demographics:
+   - Age: **65**, Sex: **Male**
+3. Clinical Setting: **Operating Room**
+4. Procedure: **Total hip replacement**
+5. Comorbidities: toggle **Yes** → check **Hypertension** and **Diabetes Mellitus**
+6. Anesthesia Technique: check **Spinal anesthesia**
+7. Baseline vitals: HR **72**, SBP **130**, DBP **80**, SpO₂ **99**
+8. Click **Start Monitoring**
+
+**Verify:** The dashboard opens with 8 vital cards showing `--`, 4 empty trend graphs, and the alert banner hidden.
+
+**Round 1 — Normal vitals:**
+
+1. Expand **"✏️ Manual Vitals Entry"** (click the header to expand)
+2. Enter: HR **74**, SBP **128**, DBP **78**, SpO₂ **99**, EtCO₂ **35**, RR **14**
+3. Click **Submit Vitals Reading**
+
+**Verify:** All 8 vital cards update. MAP auto-calculates to ~95. Shock Index shows ~0.58. All 4 trend graphs show the first data point. Alert level stays NONE (green).
+
+**Round 2 — Mild deterioration (submit 2–3 more readings, progressively worse):**
+
+- HR **88**, SBP **105**, DBP **65**, SpO₂ **96**, EtCO₂ **33**, RR **18**
+- HR **102**, SBP **92**, DBP **58**, SpO₂ **94**, EtCO₂ **30**, RR **20**
+
+**Verify:** Trend graphs show declining MAP / rising HR. Shock Index rises above 0.9 → safety alarm badge appears in the top bar ("Shock Index > 0.9"). Alert level escalates to WATCH or CONCERN.
+
+**Round 3 — Critical values:**
+
+- HR **135**, SBP **78**, DBP **48**, SpO₂ **89**, EtCO₂ **24**, RR **26**
+
+**Verify:** Full-screen **red CRITICAL overlay** appears with voice alert. Safety alarms fire for MAP < 65, SpO₂ < 92, HR > 130, EtCO₂ < 25, and Shock Index > 0.9. Acknowledge the overlay. A Clinical Insight Card appears with trend interpretation, differentials, and suggested actions.
+
+---
+
+### Test Scenario 2: Fluid Balance, Drug Log, and Clinical Events
+
+Continuing from Scenario 1 (or start a new session):
+
+**Fluid Balance:**
+
+1. In the **💧 Fluid Balance** panel, set Est. Blood Loss to **800** → click Update
+2. Set IV Fluids to **1500** → click Update
+3. Set Urine Output to **200** → click Update
+
+**Verify:** Summary cards show Total Loss (1000 ml), Total Input (1500 ml), Net Balance (+500 ml). The Fluid Balance & Shock Index trend graph updates.
+
+**Drug Administration:**
+
+1. In the **💊 Drug Administration Log** panel, select Category: **Analgesic**, name: **Fentanyl**, dose: **100mcg**, route: **IV** → click **Log Drug**
+2. Log another: Category: **Vasopressor**, name: **Phenylephrine**, dose: **100mcg**, route: **IV**
+
+**Verify:** Both drugs appear in the timestamped drug log.
+
+**Clinical Events:**
+
+1. Click quick-log buttons: **★ Induction** → **★ Intubation** → **★ Incision** → **★ Bleeding**
+2. Type a custom event: "250ml crystalloid bolus given" → click **Log**
+
+**Verify:** All events appear in reverse-chronological order in the timeline. Critical events (Bleeding) show in red.
+
+---
+
+### Test Scenario 3: AI Copilot Chat
+
+1. In the **💬 Copilot Chat** panel, type: *"The patient's blood pressure has been falling over the last 10 minutes. Estimated blood loss is 800ml. What should I do?"*
+2. Click **Send**
+
+**Verify:** Jarvis responds with a streaming clinical answer that references the patient context, vitals, fluid balance, and logged events. The response includes actionable clinical guidance.
+
+---
+
+### Test Scenario 4: Clinical Risk Prediction
+
+1. After entering several vitals readings and clinical events, scroll to the **📊 Clinical Risk Prediction** panel
+2. Click **Calculate Risk**
+
+**Verify:** Jarvis returns risk estimates (e.g., Hypotension risk, ICU Admission risk, Sepsis risk, AKI risk) displayed as colored progress bars with LOW / MODERATE / HIGH / CRITICAL labels.
+
+---
+
+### Test Scenario 5: Camera Vision (Requires a Patient Monitor or Screenshot)
+
+If you have access to a patient monitor image:
+
+1. On the dashboard, click **📷 Start Camera** (or use **"Or upload a monitor screenshot"** to upload an image)
+2. Click **🔍 Pre-flight** to run a camera readability check
+
+**Verify:** Gemini analyzes the image and reports which parameters are readable and any quality issues.
+
+3. Click **📸 Capture** (or enable **Auto-capture** at 3s intervals)
+
+**Verify:** Jarvis extracts vital signs from the monitor image, populates all 8 vital cards, updates trend graphs, and generates a Clinical Insight Card with trend interpretation.
+
+**No patient monitor?** Use **Simulation Mode** — press **Ctrl+Shift+S** (or triple-click the 🫀 logo) to load a pre-recorded video.
+
+---
+
+### Test Scenario 6: PDF Clinical Report Export
+
+After running any of the above scenarios:
+
+1. Click the **📄 Export PDF** button in the header
+
+**Verify:** A PDF downloads with the filename `JarvisOR_Report_<PatientID>_<Age><Sex>_<timestamp>.pdf`. The report includes patient demographics, baseline vitals, current vitals, vitals history table, fluid balance, drug log, clinical events timeline, active alarms, and clinical insight.
+
+---
+
+### Test Scenario 7: Gemini Live Voice (Chrome Required)
+
+1. Click the **🎤** microphone button in the chat panel
+2. Allow microphone access when prompted
+3. Speak a clinical question, e.g., *"What's happening with the patient's blood pressure?"*
+
+**Verify:** Jarvis responds with natural audio through the Gemini Live API. The conversation is displayed in the chat panel as transcribed text.
+
+4. Click 🎤 again to end the voice session
+
+---
+
+### Verify the Health Endpoint
+
+```bash
+curl https://jarvis-or-995915388976.us-central1.run.app/health
+# Expected: {"status":"ok","service":"Jarvis OR Guardian"}
+```
+
+Or for a local instance:
+
+```bash
+curl http://localhost:8000/health
+# Expected: {"status":"ok","service":"Jarvis OR Guardian"}
+```
+
+---
+
 ## Project Structure
 
 ```

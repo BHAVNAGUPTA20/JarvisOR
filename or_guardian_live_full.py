@@ -912,7 +912,7 @@ st.markdown("### Developer")
 st.write(
     """
 Dr Bhavna Gupta
-Anaesthesiologist
+Consultant Anaesthesiologist 
 
 Project: Jarvis OR Guardian — AI-Assisted Intraoperative Reasoning
 Purpose: Ambient clinical monitoring with multimodal vision, voice, and decision support

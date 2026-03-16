@@ -10,7 +10,7 @@
 
 *A multimodal AI copilot that watches the monitor so the anaesthesiologist can watch the patient.*
 
-Dr Bhavna Gupta | Anaesthesiologist
+Dr Bhavna Gupta | Consultant Anaesthesiologist 
 
 ---
 
@@ -434,7 +434,7 @@ Each risk is displayed as a visual bar with LOW / MODERATE / HIGH / CRITICAL lab
 
 ### Dr Bhavna Gupta
 
-**Anaesthesiologist**
+**Consultant Anaesthesiologist**
 
 - Practising clinician who lives the problem every day in the operating room
 - Domain expertise in intraoperative monitoring, crisis management, and patient safety
@@ -473,7 +473,7 @@ Each risk is displayed as a visual bar with LOW / MODERATE / HIGH / CRITICAL lab
 14. Click **Calculate Risk** → Postop risk bars: Hypotension HIGH, ICU MODERATE
 15. Vitals recover → trend reversal → alert downgrades
 
-**Live:** `https://jarvis-or-<hash>.run.app`
+**Live:** `https://jarvis-or-995915388976.us-central1.run.app/`
 
 ---
 
@@ -483,6 +483,6 @@ Each risk is displayed as a visual bar with LOW / MODERATE / HIGH / CRITICAL lab
 
 ### Authors
 
-**Dr Bhavna Gupta** — Anaesthesiologist | [LinkedIn](https://www.linkedin.com/in/dr-bhavna-gupta)
+**Dr Bhavna Gupta** — Consultant Anaesthesiologist | [LinkedIn](https://www.linkedin.com/in/dr-bhavna-gupta)
 
 **Aayush Gupta** — Staff Data Scientist | [LinkedIn](https://www.linkedin.com/in/gaaush/)

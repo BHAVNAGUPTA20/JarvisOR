@@ -277,10 +277,10 @@ Acknowledged transparently for clinical credibility:
 
 ## Authors
 
-**Dr Bhavna Gupta** — Anaesthesiologist
+**Dr Bhavna Gupta** — Consultant Anaesthesiologist 
 [LinkedIn](https://www.linkedin.com/in/dr-bhavna-gupta)
 
-**Aayush Gupta**
+**Aayush Gupta** - Staff Data Scientist
 [LinkedIn](https://www.linkedin.com/in/gaaush/)
 
 Project: Jarvis OR Guardian — AI-Assisted Intraoperative Reasoning

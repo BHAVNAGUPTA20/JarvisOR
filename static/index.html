@@ -9,8 +9,9 @@
     <meta name="theme-color" content="#0a0e17">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="description" content="Multimodal AI Assistant for Anaesthesia & Critical Care">
+    <meta name="description" content="Multimodal AI Clinical Monitoring & Decision Support">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
 </head>
 <body>
 
@@ -19,7 +20,7 @@
     <div class="modal-content disclaimer-modal-content">
         <div class="disclaimer-header-icon">🫀</div>
         <h2 class="disclaimer-app-name">Jarvis OR Guardian</h2>
-        <p class="disclaimer-app-tagline">Multimodal AI Assistant for Anaesthesia &amp; Critical Care — real-time intraoperative monitoring, trend analysis, clinical alerts, and decision support powered by Gemini vision.</p>
+        <p class="disclaimer-app-tagline">Multimodal AI for Clinical Monitoring &amp; Decision Support — real-time vital sign tracking, trend analysis, clinical alerts, and AI-powered guidance across OR, ICU, ED, PACU, L&amp;D, and procedural sedation settings.</p>
         <div class="disclaimer-divider"></div>
         <h3 class="disclaimer-title">Disclaimer</h3>
         <div class="disclaimer-body">
@@ -49,11 +50,12 @@
         <span class="logo-icon">🫀</span>
         <div class="header-titles">
             <h1>Jarvis OR Guardian</h1>
-            <span class="header-subtitle">Multimodal AI for Anaesthesia</span>
+            <span class="header-subtitle">AI Clinical Monitoring Copilot</span>
         </div>
     </div>
     <div class="header-right">
         <div id="connection-dot" class="status-dot dot-disconnected" title="Not connected"></div>
+        <button id="export-pdf-btn" class="btn btn-export hidden" title="Export to PDF">📄 Export PDF</button>
         <button id="settings-toggle" class="btn btn-icon" title="Settings">⚙️</button>
     </div>
 </header>
@@ -135,14 +137,30 @@
                 <span class="form-section-chevron">▾</span>
             </div>
             <div class="form-section-body" id="sec-procedure">
+                <div class="setup-row">
+                    <div class="setup-field">
+                        <label class="field-label">Clinical Setting <span class="req">★</span></label>
+                        <select id="patient-setting" class="input-field">
+                            <option value="">Select</option>
+                            <option value="Operating Room">Operating Room</option>
+                            <option value="ICU">ICU / Critical Care</option>
+                            <option value="Emergency Department">Emergency Department</option>
+                            <option value="PACU">PACU / Recovery</option>
+                            <option value="Labor & Delivery">Labor &amp; Delivery</option>
+                            <option value="Procedural Sedation">Procedural Sedation</option>
+                            <option value="Transport">Transport / Transfer</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="setup-field">
-                    <label class="field-label">Procedure / Surgery Name <span class="req">★</span></label>
-                    <input type="text" id="patient-procedure" class="input-field" placeholder="e.g. Total hip replacement">
+                    <label class="field-label">Procedure / Surgery / Admission Reason <span class="req">★</span></label>
+                    <input type="text" id="patient-procedure" class="input-field" placeholder="e.g. Total hip replacement, Sepsis management, Trauma resuscitation">
                 </div>
                 <div class="setup-row">
                     <div class="setup-field">
-                        <label class="field-label">Surgical Specialty</label>
-                        <input type="text" id="patient-specialty" class="input-field" placeholder="e.g. Orthopaedics">
+                        <label class="field-label">Clinical Specialty</label>
+                        <input type="text" id="patient-specialty" class="input-field" placeholder="e.g. Orthopaedics, Critical Care, Emergency Medicine">
                     </div>
                     <div class="setup-field">
                         <label class="field-label">Elective / Emergency</label>
@@ -165,8 +183,11 @@
                             <option value="Supine">Supine</option>
                             <option value="Prone">Prone</option>
                             <option value="Lateral">Lateral</option>
-                            <option value="Sitting">Sitting</option>
+                            <option value="Sitting">Sitting / Upright</option>
                             <option value="Lithotomy">Lithotomy</option>
+                            <option value="Trendelenburg">Trendelenburg</option>
+                            <option value="Semi-recumbent">Semi-recumbent (ICU)</option>
+                            <option value="Transport">Transport</option>
                         </select>
                     </div>
                 </div>
@@ -290,20 +311,23 @@
         <div class="form-section">
             <div class="form-section-header" data-toggle="sec-airway">
                 <span class="form-section-num">6</span>
-                <h3 class="section-title">Airway &amp; Anesthesia Context</h3>
+                <h3 class="section-title">Airway &amp; Sedation / Anesthesia</h3>
                 <span class="form-section-chevron">▾</span>
             </div>
             <div class="form-section-body" id="sec-airway">
                 <div class="setup-field">
-                    <label class="field-label">Planned Anesthesia Technique <span class="req">★</span></label>
+                    <label class="field-label">Sedation / Anesthesia Technique <span class="req">★</span></label>
                     <select id="patient-anesthesia" class="input-field">
                         <option value="">Select</option>
+                        <option value="None / Monitored">None / Monitored care only</option>
                         <option value="General anesthesia">General anesthesia</option>
                         <option value="Spinal anesthesia">Spinal anesthesia</option>
                         <option value="Epidural anesthesia">Epidural anesthesia</option>
                         <option value="Regional block">Regional block</option>
-                        <option value="Sedation">Sedation</option>
+                        <option value="Procedural sedation">Procedural sedation</option>
+                        <option value="Conscious sedation">Conscious sedation</option>
                         <option value="Combined technique">Combined technique</option>
+                        <option value="ICU sedation">ICU sedation (ventilated)</option>
                     </select>
                 </div>
                 <div class="setup-row">
@@ -332,11 +356,13 @@
             <div class="form-section-body" id="sec-monitoring">
                 <div class="checkbox-grid">
                     <label class="checkbox-label"><input type="checkbox" name="monitoring" value="Standard monitoring" checked> Standard monitoring</label>
-                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="Arterial line"> Arterial line planned</label>
+                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="Arterial line"> Arterial line</label>
                     <label class="checkbox-label"><input type="checkbox" name="monitoring" value="Central venous line"> Central venous line</label>
                     <label class="checkbox-label"><input type="checkbox" name="monitoring" value="Cardiac output monitoring"> Cardiac output monitoring</label>
-                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="BIS / Depth of anesthesia"> BIS / Depth of anesthesia</label>
+                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="BIS / Depth of sedation"> BIS / Depth of sedation</label>
                     <label class="checkbox-label"><input type="checkbox" name="monitoring" value="Urine output monitoring"> Urine output monitoring</label>
+                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="ICP monitoring"> ICP monitoring</label>
+                    <label class="checkbox-label"><input type="checkbox" name="monitoring" value="Continuous EEG"> Continuous EEG</label>
                 </div>
             </div>
         </div>
@@ -474,7 +500,7 @@
     </div>
 </section>
 
-<!-- ═══ MAIN DASHBOARD (Page 2 — Intraoperative Monitoring) ═══ -->
+<!-- ═══ MAIN DASHBOARD (Page 2 — Clinical Monitoring) ═══ -->
 <main id="dashboard" class="dashboard hidden">
 
     <!-- ── Top Row: Camera + Vitals ── -->
@@ -918,29 +944,31 @@
         </div>
     </section>
 
-    <!-- ── Bottom: Surgical Events + Chat ── -->
+    <!-- ── Bottom: Clinical Events + Chat ── -->
     <div class="dash-bottom">
 
-        <!-- Surgical Events (Enhanced) -->
+        <!-- Clinical Events (Enhanced) -->
         <section class="panel events-panel">
             <div class="panel-header">
-                <h3>📋 Surgical Events Timeline</h3>
+                <h3>📋 Clinical Events Timeline</h3>
             </div>
             <div class="events-quick-section">
                 <div class="quick-category">
-                    <h4>Anesthesia Events</h4>
+                    <h4>Airway / Anesthesia / Sedation</h4>
                     <div class="quick-btn-row">
                         <button class="quick-event-btn" data-event="Induction of anesthesia">★ Induction</button>
                         <button class="quick-event-btn" data-event="Intubation">★ Intubation</button>
                         <button class="quick-event-btn" data-event="Spinal anesthesia">Spinal</button>
                         <button class="quick-event-btn" data-event="Epidural dose">Epidural</button>
                         <button class="quick-event-btn" data-event="Regional block">Regional Block</button>
+                        <button class="quick-event-btn" data-event="Sedation started">Sedation Start</button>
                         <button class="quick-event-btn" data-event="Ventilator changes">Vent Change</button>
                         <button class="quick-event-btn" data-event="Extubation">Extubation</button>
+                        <button class="quick-event-btn" data-event="Weaning trial">Weaning Trial</button>
                     </div>
                 </div>
                 <div class="quick-category">
-                    <h4>Surgical Events</h4>
+                    <h4>Surgical / Procedural Events</h4>
                     <div class="quick-btn-row">
                         <button class="quick-event-btn" data-event="Surgical incision">★ Incision</button>
                         <button class="quick-event-btn" data-event="Tourniquet inflation">Tourniquet On</button>
@@ -949,6 +977,8 @@
                         <button class="quick-event-btn" data-event="Major surgical manipulation">Major Manipulation</button>
                         <button class="quick-event-btn" data-event="Organ clamping">Clamping</button>
                         <button class="quick-event-btn" data-event="Reperfusion">Reperfusion</button>
+                        <button class="quick-event-btn" data-event="Procedure started">Procedure Start</button>
+                        <button class="quick-event-btn" data-event="Procedure completed">Procedure End</button>
                     </div>
                 </div>
                 <div class="quick-category">
@@ -960,6 +990,21 @@
                         <button class="quick-event-btn quick-event-critical" data-event="Arrhythmia">Arrhythmia</button>
                         <button class="quick-event-btn quick-event-critical" data-event="Airway difficulty">Airway Difficulty</button>
                         <button class="quick-event-btn quick-event-critical" data-event="Cardiac arrest">Cardiac Arrest</button>
+                        <button class="quick-event-btn quick-event-critical" data-event="Seizure">Seizure</button>
+                        <button class="quick-event-btn quick-event-critical" data-event="Respiratory failure">Resp Failure</button>
+                    </div>
+                </div>
+                <div class="quick-category">
+                    <h4>ICU / ED / PACU Events</h4>
+                    <div class="quick-btn-row">
+                        <button class="quick-event-btn" data-event="Patient admission">Admission</button>
+                        <button class="quick-event-btn" data-event="Patient transfer">Transfer</button>
+                        <button class="quick-event-btn" data-event="Patient discharge">Discharge</button>
+                        <button class="quick-event-btn" data-event="Position change">Position Change</button>
+                        <button class="quick-event-btn" data-event="Line / catheter insertion">Line Inserted</button>
+                        <button class="quick-event-btn" data-event="Line / catheter removal">Line Removed</button>
+                        <button class="quick-event-btn" data-event="Nursing handover">Handover</button>
+                        <button class="quick-event-btn" data-event="Code Blue activated">Code Blue</button>
                     </div>
                 </div>
                 <div class="quick-category">
@@ -969,6 +1014,7 @@
                         <button class="quick-event-btn quick-event-warn" data-event="Suspicion of infection">Infection Suspected</button>
                         <button class="quick-event-btn quick-event-warn" data-event="Sepsis event">Sepsis Event</button>
                         <button class="quick-event-btn quick-event-warn" data-event="Antibiotics administered">Antibiotics Given</button>
+                        <button class="quick-event-btn quick-event-warn" data-event="Cultures sent">Cultures Sent</button>
                     </div>
                 </div>
             </div>
@@ -988,7 +1034,7 @@
             </div>
             <div id="chat-messages" class="chat-messages">
                 <div class="chat-msg assistant">
-                    <div class="chat-bubble">Jarvis online. I'm monitoring vitals and ready to assist. Ask me anything about the case.</div>
+                    <div class="chat-bubble">Jarvis online. Monitoring vitals and ready to assist. Ask me anything about the patient or clinical situation.</div>
                 </div>
             </div>
             <div class="chat-input-row">
@@ -999,14 +1045,14 @@
         </section>
     </div>
 
-    <!-- ── Postoperative Risk Prediction ── -->
+    <!-- ── Clinical Risk Prediction ── -->
     <section class="panel postop-panel" id="postop-panel">
         <div class="panel-header">
-            <h3>📊 Postoperative Risk Prediction</h3>
+            <h3>📊 Clinical Risk Prediction</h3>
             <button id="postop-calculate" class="btn btn-small btn-outline">Calculate Risk</button>
         </div>
         <div id="postop-body" class="postop-body">
-            <p class="events-empty">Click "Calculate Risk" after sufficient intraoperative data is available.</p>
+            <p class="events-empty">Click "Calculate Risk" after sufficient monitoring data is available.</p>
         </div>
     </section>
 
@@ -1024,7 +1070,7 @@
 <!-- ═══ FOOTER ═══ -->
 <footer class="app-footer">
     <div class="footer-left">
-        <a href="https://www.linkedin.com/in/dr-bhavna-gupta" target="_blank" rel="noopener"><strong>Dr Bhavna Gupta</strong></a> · Consultant Anaesthesiologist 
+        <a href="https://www.linkedin.com/in/dr-bhavna-gupta" target="_blank" rel="noopener"><strong>Dr Bhavna Gupta</strong></a> · Consultant Anaesthesiologist &amp; Intensivist
         &nbsp;|&nbsp;
         <a href="https://www.linkedin.com/in/gaaush/" target="_blank" rel="noopener"><strong>Aayush Gupta</strong></a> · Staff Data Scientist
     </div>

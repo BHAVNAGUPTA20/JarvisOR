@@ -1,9 +1,10 @@
 /* ═══════════════════════════════════════════════════════════
    Jarvis OR Guardian — Client Application
+   Multimodal AI Clinical Monitoring & Decision Support
    Camera capture, ROI cropping, simulation mode,
    trend tracking, alert engine, voice, chat,
    manual vitals entry, fluid balance, drug log,
-   alarm system, postop risk prediction
+   alarm system, clinical risk prediction
    ═══════════════════════════════════════════════════════════ */
 
 const $ = (sel) => document.querySelector(sel);
@@ -577,6 +578,7 @@ class JarvisApp {
         this.bindDrugLog();
         this.bindAlarmPanel();
         this.bindPostopRisk();
+        this.bindExportPDF();
     }
 
     // ── Disclaimer ──
@@ -604,6 +606,7 @@ class JarvisApp {
 
             const age = $('#patient-age').value.trim();
             const sex = $('#patient-sex').value;
+            const clinicalSetting = $('#patient-setting')?.value || '';
             const procedure = $('#patient-procedure').value.trim();
             const anesthesia = $('#patient-anesthesia').value;
             const baseHR = $('#base-hr').value.trim();
@@ -612,8 +615,9 @@ class JarvisApp {
             const baseSpo2 = $('#base-spo2').value.trim();
 
             if (!age || !sex) { alert('Please fill Age and Sex (required fields)'); return; }
-            if (!procedure) { alert('Please fill Procedure / Surgery Name (required field)'); return; }
-            if (!anesthesia) { alert('Please select Planned Anesthesia Technique (required field)'); return; }
+            if (!clinicalSetting) { alert('Please select a Clinical Setting (required field)'); return; }
+            if (!procedure) { alert('Please fill Procedure / Surgery / Admission Reason (required field)'); return; }
+            if (!anesthesia) { alert('Please select Sedation / Anesthesia Technique (required field)'); return; }
             if (!baseHR || !baseSBP || !baseDBP || !baseSpo2) { alert('Please fill mandatory baseline vitals: HR, SBP, DBP, SpO₂'); return; }
 
             state.apiKey = apiKey;
@@ -625,6 +629,7 @@ class JarvisApp {
 
             state.patientContext = {
                 age, sex,
+                clinical_setting: clinicalSetting,
                 weight: $('#patient-weight').value || null,
                 height: $('#patient-height').value || null,
                 bmi: $('#patient-bmi').value || null,
@@ -668,6 +673,7 @@ class JarvisApp {
             $('#setup-panel').classList.add('hidden');
             $('#dashboard').classList.remove('hidden');
             $('#connection-dot').className = 'status-dot dot-connected';
+            $('#export-pdf-btn').classList.remove('hidden');
             this.renderBaselineVitals();
         });
     }
@@ -1079,7 +1085,7 @@ class JarvisApp {
         if (on && !existing) {
             const div = document.createElement('div');
             div.className = 'analyzing-indicator';
-            div.innerHTML = '<span class="spinner"></span> Jarvis analysing monitor…';
+            div.innerHTML = '<span class="spinner"></span> Jarvis analysing…';
             document.querySelector('.camera-panel').appendChild(div);
         } else if (!on && existing) {
             existing.remove();
@@ -1451,7 +1457,7 @@ class JarvisApp {
         const fluids = state.fluidBalance;
 
         if (history.length < 3) {
-            alert('Insufficient intraoperative data. Please record at least 3 vitals readings.');
+            alert('Insufficient monitoring data. Please record at least 3 vitals readings.');
             return;
         }
 
@@ -1528,7 +1534,7 @@ class JarvisApp {
             `).join('')}
         </div>
         <p style="font-size:11px;color:var(--text-muted);margin-top:12px;text-align:center;">
-            Risk scores are estimated based on patient baseline, intraoperative vitals trends, fluid balance, and surgical events. These are for decision support only.
+            Risk scores are estimated based on patient baseline, vitals trends, fluid balance, and clinical events. These are for decision support only.
         </p>`;
     }
 
@@ -1617,9 +1623,11 @@ class JarvisApp {
         if (ctx.asa) demographics += ` | ${ctx.asa}`;
         parts.push(demographics);
 
-        let procedureInfo = `Procedure: ${ctx.procedure}`;
+        if (ctx.clinical_setting) parts.push(`Clinical Setting: ${ctx.clinical_setting}`);
+
+        let procedureInfo = `Procedure / Reason: ${ctx.procedure}`;
         if (ctx.urgency) procedureInfo += ` (${ctx.urgency})`;
-        if (ctx.anesthesia_technique) procedureInfo += ` | Anesthesia: ${ctx.anesthesia_technique}`;
+        if (ctx.anesthesia_technique) procedureInfo += ` | Sedation/Anesthesia: ${ctx.anesthesia_technique}`;
         if (ctx.position) procedureInfo += ` | Position: ${ctx.position}`;
         parts.push(procedureInfo);
 
@@ -1660,7 +1668,7 @@ class JarvisApp {
         }
 
         if (state.surgicalEvents.length) {
-            parts.push('Surgical events:\n' + state.surgicalEvents.slice(-8).map(e => `- ${e.time}: ${e.event}`).join('\n'));
+            parts.push('Clinical events:\n' + state.surgicalEvents.slice(-8).map(e => `- ${e.time}: ${e.event}`).join('\n'));
         }
 
         if (state.activeAlarms.length) {
@@ -1840,8 +1848,359 @@ class JarvisApp {
             $('#alert-banner').classList.add('hidden');
             $('#safety-alarms-bar').classList.add('hidden');
             $('#connection-dot').className = 'status-dot dot-disconnected';
+            $('#export-pdf-btn').classList.add('hidden');
             drawer.classList.add('hidden');
         });
+    }
+
+    // ── Export PDF ──
+
+    bindExportPDF() {
+        $('#export-pdf-btn').addEventListener('click', () => this.exportToPDF());
+    }
+
+    exportToPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const pw = doc.internal.pageSize.getWidth();
+        const ph = doc.internal.pageSize.getHeight();
+        const margin = 15;
+        const contentW = pw - margin * 2;
+        let y = margin;
+
+        const colors = {
+            headerBg: [10, 14, 23],
+            sectionBg: [21, 29, 46],
+            accent: [59, 130, 246],
+            green: [16, 185, 129],
+            red: [239, 68, 68],
+            orange: [249, 115, 22],
+            textPrimary: [226, 232, 240],
+            textSecondary: [148, 163, 184],
+            textMuted: [100, 116, 139],
+            border: [30, 58, 95],
+        };
+
+        const checkPage = (needed) => {
+            if (y + needed > ph - 15) {
+                doc.addPage();
+                y = margin;
+            }
+        };
+
+        const drawSectionHeader = (title) => {
+            checkPage(14);
+            doc.setFillColor(...colors.accent);
+            doc.roundedRect(margin, y, contentW, 9, 1.5, 1.5, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.setTextColor(255, 255, 255);
+            doc.text(title, margin + 4, y + 6.5);
+            y += 13;
+        };
+
+        const drawKeyValue = (key, value, xOffset = 0) => {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(...colors.textSecondary);
+            doc.text(`${key}:`, margin + 3 + xOffset, y);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...colors.textPrimary);
+            const valStr = value != null ? String(value) : 'N/A';
+            doc.text(valStr, margin + 3 + xOffset + doc.getTextWidth(`${key}: `), y);
+        };
+
+        const drawRow = (pairs) => {
+            checkPage(7);
+            const colW = contentW / pairs.length;
+            pairs.forEach(([k, v], i) => drawKeyValue(k, v, i * colW));
+            y += 6;
+        };
+
+        // === Title Banner ===
+        doc.setFillColor(...colors.headerBg);
+        doc.rect(0, 0, pw, 32, 'F');
+        doc.setFillColor(...colors.accent);
+        doc.rect(0, 32, pw, 1, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(18);
+        doc.setTextColor(255, 255, 255);
+        doc.text('Jarvis OR Guardian', pw / 2, 14, { align: 'center' });
+        doc.setFontSize(9);
+        doc.setTextColor(...colors.textSecondary);
+        doc.text('Clinical Monitoring Report', pw / 2, 21, { align: 'center' });
+        const now = new Date();
+        doc.setFontSize(8);
+        doc.setTextColor(...colors.textMuted);
+        doc.text(`Generated: ${now.toLocaleDateString()} at ${now.toLocaleTimeString()}`, pw / 2, 28, { align: 'center' });
+        y = 40;
+
+        // === Patient Demographics ===
+        const ctx = state.patientContext;
+        if (ctx && ctx.age) {
+            drawSectionHeader('Patient Demographics');
+            drawRow([['Age', `${ctx.age} years`], ['Sex', ctx.sex], ['Setting', ctx.clinical_setting || 'N/A'], ['ASA', ctx.asa || 'N/A']]);
+            if (ctx.weight || ctx.height) {
+                drawRow([['Weight', ctx.weight ? `${ctx.weight} kg` : 'N/A'], ['Height', ctx.height ? `${ctx.height} cm` : 'N/A'], ['BMI', ctx.bmi || 'N/A']]);
+            }
+            drawRow([['Procedure', ctx.procedure], ['Urgency', ctx.urgency || 'N/A']]);
+            drawRow([['Anesthesia', ctx.anesthesia_technique], ['Position', ctx.position || 'N/A']]);
+            if (ctx.diagnosis) drawRow([['Diagnosis', ctx.diagnosis]]);
+            drawRow([['Comorbidities', ctx.comorbidities || 'None']]);
+            drawRow([['Allergies', ctx.allergies || 'NKDA']]);
+            if (ctx.medications && ctx.medications !== 'None') drawRow([['Medications', ctx.medications]]);
+            if (ctx.difficult_airway === 'Yes') drawRow([['Airway', 'Anticipated Difficult Airway']]);
+            if (ctx.monitoring_plan) drawRow([['Monitoring', ctx.monitoring_plan]]);
+            y += 4;
+        }
+
+        // === Baseline Vitals ===
+        if (state.baseline) {
+            drawSectionHeader('Baseline Vitals');
+            const b = state.baseline;
+            const baseMAP = calcMAP(b.sbp, b.dbp);
+            drawRow([['HR', `${b.hr} bpm`], ['SpO\u2082', `${b.spo2}%`], ['BP', `${b.sbp}/${b.dbp} mmHg`], ['MAP', baseMAP != null ? `${baseMAP} mmHg` : 'N/A']]);
+            drawRow([['EtCO\u2082', b.etco2 ? `${b.etco2} mmHg` : 'N/A'], ['RR', b.rr ? `${b.rr}/min` : 'N/A'], ['Temp', b.temp ? `${b.temp}\u00B0C` : 'N/A']]);
+            y += 4;
+        }
+
+        // === Current Vitals ===
+        if (state.lastAnalysis && state.lastAnalysis.vitals_extracted) {
+            drawSectionHeader('Current Vitals (Last Reading)');
+            const v = state.lastAnalysis.vitals_extracted;
+            const si = calcShockIndex(v.hr, v.sbp);
+            drawRow([['HR', v.hr != null ? `${v.hr} bpm` : '--'], ['SpO\u2082', v.spo2 != null ? `${v.spo2}%` : '--'], ['BP', v.sbp != null ? `${v.sbp}/${v.dbp} mmHg` : '--'], ['MAP', v.map != null ? `${v.map} mmHg` : '--']]);
+            drawRow([['EtCO\u2082', v.etco2 != null ? `${v.etco2} mmHg` : '--'], ['RR', v.rr != null ? `${v.rr}/min` : '--'], ['Temp', v.temp != null ? `${v.temp}\u00B0C` : '--'], ['Shock Index', si != null ? si : '--']]);
+            drawRow([['Alert Level', state.lastAnalysis.alert_level || 'NONE']]);
+            y += 4;
+        }
+
+        // === Vitals Trend Summary ===
+        if (state.visionHistory.length >= 2) {
+            drawSectionHeader(`Vitals Trend (${state.visionHistory.length} readings)`);
+            const trend = this.trendBuffer.getTrendSummary();
+            if (trend && !trend.text) {
+                drawRow([['Trajectory', trend.trajectory?.replace(/_/g, ' ')], ['Duration', `${trend.duration_mins} min`], ['Readings', trend.readings_count]]);
+                const deltas = Object.entries(trend).filter(([k]) => k.endsWith('_delta'));
+                if (deltas.length) {
+                    checkPage(7);
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(8);
+                    doc.setTextColor(...colors.textSecondary);
+                    const deltaStr = deltas.map(([k, v]) => {
+                        const name = k.replace('_delta', '').toUpperCase();
+                        return `${name}: ${v > 0 ? '+' : ''}${v}`;
+                    }).join('   |   ');
+                    doc.text(`Deltas: ${deltaStr}`, margin + 3, y);
+                    y += 6;
+                }
+            }
+
+            // Vitals history table
+            checkPage(20);
+            const history = state.visionHistory;
+            const headers = ['Time', 'HR', 'SpO\u2082', 'SBP/DBP', 'MAP', 'EtCO\u2082', 'RR', 'Temp', 'SI'];
+            const colWidths = [22, 14, 14, 22, 16, 16, 12, 14, 14];
+            let tx = margin;
+
+            doc.setFillColor(...colors.sectionBg);
+            doc.rect(margin, y, contentW, 6, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7);
+            doc.setTextColor(...colors.accent);
+            headers.forEach((h, i) => {
+                doc.text(h, tx + 1, y + 4);
+                tx += colWidths[i];
+            });
+            y += 7;
+
+            const maxRows = 30;
+            const displayHistory = history.length > maxRows ? history.slice(-maxRows) : history;
+            displayHistory.forEach((r, idx) => {
+                checkPage(6);
+                if (idx % 2 === 0) {
+                    doc.setFillColor(17, 24, 39);
+                    doc.rect(margin, y - 1, contentW, 5.5, 'F');
+                }
+                tx = margin;
+                const time = new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const rowData = [
+                    time,
+                    r.hr != null ? String(r.hr) : '--',
+                    r.spo2 != null ? String(r.spo2) : '--',
+                    r.sbp != null ? `${r.sbp}/${r.dbp || '--'}` : '--',
+                    r.map != null ? String(r.map) : '--',
+                    r.etco2 != null ? String(r.etco2) : '--',
+                    r.rr != null ? String(r.rr) : '--',
+                    r.temp != null ? String(r.temp) : '--',
+                    r.si != null ? String(r.si) : '--',
+                ];
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7);
+                doc.setTextColor(...colors.textPrimary);
+                rowData.forEach((d, i) => {
+                    doc.text(d, tx + 1, y + 3);
+                    tx += colWidths[i];
+                });
+                y += 5.5;
+            });
+
+            if (history.length > maxRows) {
+                doc.setFontSize(7);
+                doc.setTextColor(...colors.textMuted);
+                doc.text(`... showing last ${maxRows} of ${history.length} readings`, margin + 3, y + 3);
+                y += 5;
+            }
+            y += 4;
+        }
+
+        // === Fluid Balance ===
+        const f = state.fluidBalance;
+        if (f.ebl || f.ivf || f.blood || f.urine) {
+            drawSectionHeader('Fluid Balance');
+            const totalLoss = f.ebl + f.urine;
+            const totalInput = f.ivf + f.blood;
+            const net = totalInput - totalLoss;
+            drawRow([['Est. Blood Loss', `${f.ebl} ml`], ['IV Fluids', `${f.ivf} ml`], ['Blood Transfusion', `${f.blood} ml`], ['Urine Output', `${f.urine} ml`]]);
+            drawRow([['Total Loss', `${totalLoss} ml`], ['Total Input', `${totalInput} ml`], ['Net Balance', `${net >= 0 ? '+' : ''}${net} ml`]]);
+            y += 4;
+        }
+
+        // === Drug Administration Log ===
+        if (state.drugLog.length) {
+            drawSectionHeader(`Drug Administration Log (${state.drugLog.length} entries)`);
+            state.drugLog.forEach((d) => {
+                checkPage(6);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(8);
+                doc.setTextColor(...colors.textMuted);
+                doc.text(d.time, margin + 3, y);
+                doc.setTextColor(...colors.orange);
+                doc.text(d.category, margin + 25, y);
+                doc.setTextColor(...colors.textPrimary);
+                const detail = `${d.name}${d.dose ? ' — ' + d.dose : ''}${d.route ? ' (' + d.route + ')' : ''}`;
+                doc.text(detail, margin + 55, y);
+                y += 5;
+            });
+            y += 4;
+        }
+
+        // === Surgical Events Timeline ===
+        if (state.surgicalEvents.length) {
+            drawSectionHeader(`Clinical Events Timeline (${state.surgicalEvents.length} events)`);
+            state.surgicalEvents.forEach((e) => {
+                checkPage(6);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(8);
+                doc.setTextColor(...colors.textMuted);
+                doc.text(e.time, margin + 3, y);
+                const color = e.type === 'critical' ? colors.red : e.type === 'warn' ? colors.orange : colors.textPrimary;
+                doc.setTextColor(...color);
+                const evLines = doc.splitTextToSize(e.event, contentW - 28);
+                doc.text(evLines, margin + 25, y);
+                y += evLines.length * 4 + 2;
+            });
+            y += 4;
+        }
+
+        // === Active Alarms ===
+        if (state.activeAlarms.length) {
+            drawSectionHeader('Active Alarms');
+            state.activeAlarms.forEach((a) => {
+                checkPage(6);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(8);
+                const color = a.level === 'critical' ? colors.red : colors.orange;
+                doc.setTextColor(...color);
+                const alarmLines = doc.splitTextToSize(`\u26A0 ${a.msg}`, contentW - 6);
+                doc.text(alarmLines, margin + 3, y);
+                y += alarmLines.length * 4 + 2;
+            });
+            y += 4;
+        }
+
+        // === Clinical Insight ===
+        if (state.lastAnalysis) {
+            const la = state.lastAnalysis;
+            drawSectionHeader('Clinical Insight (Last Analysis)');
+            if (la.trend_interpretation) {
+                checkPage(10);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.setTextColor(...colors.accent);
+                doc.text('Trend:', margin + 3, y);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(...colors.textPrimary);
+                const lines = doc.splitTextToSize(la.trend_interpretation, contentW - 18);
+                doc.text(lines, margin + 18, y);
+                y += lines.length * 4 + 3;
+            }
+            if (la.physiological_explanation) {
+                checkPage(10);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.setTextColor(...colors.accent);
+                doc.text('Physiology:', margin + 3, y);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(...colors.textPrimary);
+                const lines = doc.splitTextToSize(la.physiological_explanation, contentW - 25);
+                doc.text(lines, margin + 25, y);
+                y += lines.length * 4 + 3;
+            }
+            if (la.differentials?.length) {
+                checkPage(8);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.setTextColor(...colors.accent);
+                doc.text('Differentials:', margin + 3, y);
+                y += 5;
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(...colors.textPrimary);
+                la.differentials.forEach((d, i) => {
+                    checkPage(5);
+                    const lines = doc.splitTextToSize(`${i + 1}. ${d}`, contentW - 10);
+                    doc.text(lines, margin + 6, y);
+                    y += lines.length * 4 + 1;
+                });
+                y += 2;
+            }
+            if (la.suggested_actions?.length) {
+                checkPage(8);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.setTextColor(...colors.accent);
+                doc.text('Suggested Actions:', margin + 3, y);
+                y += 5;
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(...colors.textPrimary);
+                la.suggested_actions.forEach((a) => {
+                    checkPage(5);
+                    const lines = doc.splitTextToSize(`\u2022 ${a}`, contentW - 10);
+                    doc.text(lines, margin + 6, y);
+                    y += lines.length * 4 + 1;
+                });
+                y += 2;
+            }
+            y += 4;
+        }
+
+        // === Footer ===
+        const totalPages = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+            doc.setPage(i);
+            doc.setFillColor(...colors.border);
+            doc.rect(0, ph - 12, pw, 12, 'F');
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7);
+            doc.setTextColor(...colors.textMuted);
+            doc.text('Jarvis OR Guardian — Educational clinical decision support prototype. Not FDA-cleared.', pw / 2, ph - 6, { align: 'center' });
+            doc.text(`Page ${i} of ${totalPages}`, pw - margin, ph - 6, { align: 'right' });
+        }
+
+        const patientAge = ctx.age || 'unknown';
+        const patientSex = ctx.sex || '';
+        const timestamp = now.toISOString().slice(0, 16).replace(/[:T]/g, '-');
+        doc.save(`JarvisOR_Report_${patientAge}${patientSex.charAt(0)}_${timestamp}.pdf`);
     }
 
     // ── Critical Overlay ──

@@ -1,7 +1,7 @@
 {
   "name": "Jarvis OR Guardian",
   "short_name": "Jarvis OR",
-  "description": "Multimodal AI Assistant for Anaesthesia & Critical Care",
+  "description": "Multimodal AI Clinical Monitoring & Decision Support",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",

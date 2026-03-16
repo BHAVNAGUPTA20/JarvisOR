@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════
    Jarvis OR Guardian — Medical-Grade Dark UI
+   Clinical Monitoring & Decision Support
    ═══════════════════════════════════════════════════ */
 
 :root {
@@ -1527,6 +1528,31 @@ body {
     50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
 }
 
+/* ─── Export PDF Button ─── */
+
+.btn-export {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.25s;
+    letter-spacing: 0.2px;
+}
+
+.btn-export:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
+    transform: translateY(-1px);
+}
+
+.btn-export:active {
+    transform: translateY(0);
+}
+
 /* ─── Responsive ─── */
 
 @media (max-width: 1100px) {
@@ -1549,6 +1575,7 @@ body {
 @media (max-width: 600px) {
     .app-header { padding: 10px 16px; }
     .header-titles h1 { font-size: 15px; }
+    .btn-export { padding: 5px 10px; font-size: 11px; }
     .dashboard { padding: 10px; }
     .vitals-grid { grid-template-columns: repeat(2, 1fr); }
     .vital-value { font-size: 22px; }

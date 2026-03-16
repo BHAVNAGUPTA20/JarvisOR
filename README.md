@@ -1,8 +1,8 @@
 # Jarvis OR Guardian
 
-**Multimodal AI Assistant for Anaesthesia & Critical Care**
+**Multimodal AI Clinical Monitoring & Decision Support**
 
-Jarvis OR Guardian uses a phone or tablet camera pointed at an anesthesia workstation monitor to continuously extract vital signs, interpret waveforms, detect clinical deterioration, and provide real-time decision support to anaesthesiologists — powered by Gemini 2.5 Flash vision.
+Jarvis OR Guardian uses a phone or tablet camera pointed at any patient monitor to continuously extract vital signs, interpret waveforms, detect clinical deterioration, and provide real-time decision support to clinicians across operating rooms, ICUs, emergency departments, PACUs, and beyond — powered by Gemini 2.5 Flash vision.
 
 > **Disclaimer:** This system is designed for educational and clinical decision-support purposes only. It does not replace professional medical judgment or standard clinical monitoring. All patient management decisions must be made by qualified healthcare professionals. The developers assume no responsibility for clinical decisions made using this tool.
 
@@ -10,15 +10,33 @@ Jarvis OR Guardian uses a phone or tablet camera pointed at an anesthesia workst
 
 ## The Problem
 
-During surgery, anaesthesiologists monitor 8+ vital parameters simultaneously while managing drugs, airway, fluids, and responding to surgical events. Cognitive overload is real — studies show critical alarms are missed or acknowledged late in **23–30%** of cases, especially during high-workload phases.
+Across every monitored clinical setting — operating rooms, ICUs, emergency departments, PACUs, labor suites, procedural sedation units, and transport environments — clinicians face the same core challenge: cognitive overload. An anaesthesiologist during surgery, an intensivist managing a ventilated patient, or an ED physician running a trauma resuscitation must all track 8+ vital parameters simultaneously while managing drugs, airway, fluids, and responding to rapidly evolving clinical events. Studies show critical alarms are missed or acknowledged late in **23–30%** of cases, especially during high-workload phases — and this problem spans every setting where patients are continuously monitored.
 
-Existing solutions require proprietary monitor integrations (HL7, DICOM, vendor SDKs) that are expensive, gated, and incompatible across devices.
+Existing solutions require proprietary monitor integrations (HL7, DICOM, vendor SDKs) that are expensive, gated, and incompatible across devices — locking out low-resource facilities, field hospitals, and transport teams entirely.
 
 ## The Solution
 
-**The camera is the interface.** Point any phone at any monitor. Jarvis reads the screen every 3 seconds, extracts structured vitals via Gemini vision, tracks trends over time, and escalates through 4 alert tiers with voice alerts, vibration, and clinical guidance — all without touching the hospital's IT infrastructure.
+**The camera is the interface.** Point any phone at any patient monitor — in an OR, ICU bed, ED bay, PACU slot, L&D suite, or field tent. Jarvis reads the screen every 3 seconds, extracts structured vitals via Gemini vision, tracks trends over time, and escalates through 4 alert tiers with voice alerts, vibration, and clinical guidance — all without touching the hospital's IT infrastructure.
 
 When the camera isn't available, clinicians can **manually enter vitals** directly into the system. Jarvis auto-calculates derived indicators (MAP, Shock Index) and feeds everything into the same trend analysis and alarm engine.
+
+The system adapts to the clinical context: select your setting (OR, ICU, ED, PACU, L&D, Procedural Sedation, Transport, or Other) and Jarvis tailors its event categories, risk models, and clinical reasoning accordingly.
+
+---
+
+## Use Cases
+
+| Clinical Setting | Description |
+|---|---|
+| **Operating Room** | Intraoperative anesthesia monitoring — track vitals, surgical events, fluid balance, and drug administration during surgery |
+| **ICU / Critical Care** | Continuous monitoring of ventilated and hemodynamically unstable patients, ICP tracking, sedation management, and early deterioration detection |
+| **Emergency Department** | Trauma resuscitation monitoring, rapid assessment support, and real-time trend tracking in high-acuity ED bays |
+| **PACU / Recovery** | Post-anesthesia recovery monitoring with sedation weaning, emergence tracking, and discharge-readiness scoring |
+| **Labor & Delivery** | Maternal vital sign monitoring during labor, cesarean sections, and postpartum recovery |
+| **Procedural Sedation** | Monitoring during endoscopy, cardiac catheterization, interventional radiology, and other procedures requiring sedation |
+| **Transport / Transfer** | Portable monitoring during intra- and inter-hospital patient transfers, ambulance transport, and aeromedical evacuation |
+| **Field / Military Medicine** | Austere-environment monitoring for combat casualty care, disaster response, and remote field hospitals where integration with fixed infrastructure is impossible |
+| **Medical Education & Simulation** | Training tool for residents, fellows, and nursing students — simulate clinical deterioration scenarios and practice recognition and response |
 
 ---
 
@@ -29,19 +47,19 @@ When the camera isn't available, clinicians can **manually enter vitals** direct
 | # | Section | Key Fields |
 |---|---|---|
 | 1 | Patient Demographics | Age★, Sex★, Weight, Height, BMI (auto-calculated) |
-| 2 | Procedure Information | Surgery name★, Specialty, Elective/Emergency, Duration, Position |
+| 2 | Clinical Setting & Procedure | **Clinical Setting★** (Operating Room, ICU, ED, PACU, L&D, Procedural Sedation, Transport, Other), Surgery/Procedure name★, Specialty, Elective/Emergency, Duration, Position |
 | 3 | Clinical Risk | ASA Physical Status (I–VI), Primary diagnosis, Allergies |
 | 4 | Comorbidities | Major comorbidities★ toggle with 12 condition checkboxes |
 | 5 | Medication Status | Controlled Y/N, 7 medication categories |
-| 6 | Airway & Anesthesia | Technique★ (6 options), Assessment, Difficult airway flag |
-| 7 | Monitoring Plan | Standard, Arterial line, CVP, Cardiac output, BIS, Urine output |
+| 6 | Airway & Sedation / Anesthesia | Technique★ (None / Monitored care only, Procedural sedation, Conscious sedation, ICU sedation, General, Spinal, Epidural, Regional block, Combined), Assessment, Difficult airway flag |
+| 7 | Monitoring Plan | Standard, Arterial line, CVP, Cardiac output, BIS, Urine output, **ICP monitoring**, **Continuous EEG** |
 | 8 | Baseline Vitals | HR★, SBP★, DBP★, SpO₂★, RR, Temp, EtCO₂ |
 | 9 | Trend Settings | Window size★ (short / medium / long) |
 | 10 | Optional Context | Pregnancy, NPO hours, Blood group, Blood products, ICU plan, Notes |
 
 A mandatory **disclaimer** is displayed before any patient data entry.
 
-### Page 2 — Intraoperative Monitoring Dashboard
+### Page 2 — Clinical Monitoring Dashboard
 
 | Feature | Description |
 |---|---|
@@ -51,12 +69,12 @@ A mandatory **disclaimer** is displayed before any patient data entry.
 | **4 Trend Graphs** | Hemodynamic (HR, MAP, SBP), Respiratory (SpO₂, EtCO₂, RR), Temperature, Fluid Balance & Shock Index — all time-stamped |
 | **Fluid Balance Tracking** | Estimated blood loss★, IV fluids★, blood transfusion, urine output — with auto-calculated total loss, total input, and net balance |
 | **Drug Administration Log** | 12 drug categories (vasopressors, inotropes, sedatives, muscle relaxants, analgesics, antibiotics, IV fluids/colloids, blood products, local anesthetics, antiemetics, reversal agents, other) with name, dose, route, and timestamp |
-| **Surgical Events Timeline** | 24 quick-log buttons organized in 4 categories: Anesthesia Events (induction, intubation, spinal, epidural, regional block, vent change, extubation), Surgical Events (incision, tourniquet on/off, insufflation, major manipulation, clamping, reperfusion), Critical Events (bleeding, hypotension, desaturation, arrhythmia, airway difficulty, cardiac arrest), Infection/Sepsis (temp rise, infection suspected, sepsis event, antibiotics given) — plus custom text input |
+| **Clinical Events Timeline** | Quick-log buttons organized across multiple categories: **Airway / Anesthesia / Sedation** (Induction, Intubation, Spinal, Epidural, Regional Block, Vent Change, Extubation, Sedation Start, Weaning Trial), **Surgical / Procedural Events** (Incision, Tourniquet On/Off, Insufflation, Major Manipulation, Clamping, Reperfusion, Procedure Start, Procedure End), **ICU / ED / PACU Events** (Admission, Transfer, Discharge, Position Change, Line Inserted, Line Removed, Handover, Code Blue), **Critical Events** (Bleeding, Hypotension, Desaturation, Arrhythmia, Airway Difficulty, Cardiac Arrest, Seizure, Respiratory Failure), **Infection / Sepsis** (Temp Rise, Infection Suspected, Sepsis Event, Antibiotics Given) — plus custom text input |
 | **Alarm & Safety System** | 9 configurable threshold alarms (MAP < 65, SpO₂ < 92%, EtCO₂ < 25 / > 50, HR < 45 / > 130, Shock Index > 0.9, Temp > 38.5°C / < 35°C) with real-time alarm badges and safety bar |
 | **4-Tier Alert Engine** | NONE → WATCH → CONCERN → CRITICAL with audio tones, vibration, voice alerts, and full-screen red overlay |
 | **Clinical Insight Cards** | Structured 7-section cards: vitals, waveforms, trend interpretation, differentials, checks, actions, alarms |
-| **Postoperative Risk Prediction** | AI-estimated risk scores for postoperative hypotension, ICU admission, sepsis, and acute kidney injury — based on patient baseline, intraoperative trends, fluid balance, and surgical events |
-| **Copilot Chat** | Streaming AI chat fused with full patient context, vitals, baseline, fluid balance, drug log, surgical events, and active alarms |
+| **Clinical Risk Prediction** | AI-estimated risk scores for hypotension, ICU admission, sepsis, and acute kidney injury — based on patient baseline, clinical trends, fluid balance, and events across the monitoring session |
+| **Copilot Chat** | Streaming AI chat fused with full patient context, vitals, baseline, fluid balance, drug log, clinical events, and active alarms |
 | **Voice I/O** | Web Speech API for voice input + browser TTS for critical voice alerts |
 | **Simulation Mode** | Hidden MP4 fallback for demo reliability (triple-click logo or Ctrl+Shift+S) |
 | **PWA Support** | Installable on any device via manifest, works on phones and tablets |
@@ -107,19 +125,20 @@ Camera / MP4 / Manual Entry
        ▲                         │  Gemini 2.5   │
        │                         │  Flash Vision │
   ┌──────────────┐               └───────┬──────┘
-  │  Dashboard    │◀─────────────────────┘
-  │  ┌──────────┐│  Structured JSON
+  │  Clinical     │◀─────────────────────┘
+  │  Dashboard    │  Structured JSON
+  │  ┌──────────┐│
   │  │Alert     ││
   │  │Engine    ││  4 Trend Charts
   │  ├──────────┤│  (Hemo, Resp, Temp, Fluid+SI)
   │  │Trend Buf ││
   │  ├──────────┤│  Fluid Balance + Drug Log
   │  │Fluid Bal ││
-  │  ├──────────┤│  Alarm System
+  │  ├──────────┤│  Clinical Events Timeline
   │  │Drug Log  ││
-  │  ├──────────┤│  Postop Risk
-  │  │Postop    ││
-  │  │Risk Pred ││
+  │  ├──────────┤│  Alarm System
+  │  │Clinical  ││
+  │  │Risk Pred ││  Clinical Risk Prediction
   │  └──────────┘│
   └──────────────┘
 ```
@@ -127,14 +146,14 @@ Camera / MP4 / Manual Entry
 ### What Jarvis Combines for Clinical Reasoning
 
 ```
-Patient baseline (Page 1)
+Patient baseline (Page 1) + Clinical setting
   + Real-time vitals (camera or manual)
   + Vital trends over time (4 graphs)
-  + Surgical events (24 quick-log buttons + custom)
+  + Clinical events (quick-log buttons + custom)
   + Drug administration log
   + Fluid balance (EBL, IVF, blood, urine)
   + Active alarm states
-  = Clinical reasoning + Postoperative risk prediction
+  = Clinical reasoning + Clinical risk prediction
 ```
 
 ### Tech Stack
@@ -219,15 +238,15 @@ JarvisOR/
 ├── app.py                    # FastAPI backend (Gemini vision, chat, safety endpoints)
 ├── static/
 │   ├── index.html            # Single-page app (disclaimer, 10-section patient intake,
-│   │                         #   intraoperative monitoring dashboard with manual entry,
+│   │                         #   clinical monitoring dashboard with manual entry,
 │   │                         #   4 trend charts, fluid balance, drug log, alarm system,
-│   │                         #   surgical events timeline, postop risk, chat)
+│   │                         #   clinical events timeline, clinical risk, chat)
 │   ├── style.css             # Dark medical-grade UI (alarm badges, quick-event buttons,
-│   │                         #   fluid summary cards, drug log, postop risk bars,
+│   │                         #   fluid summary cards, drug log, clinical risk bars,
 │   │                         #   collapsible panels, responsive)
 │   ├── app.js                # Client logic (CameraManager, ROIManager, AlertEngine,
 │   │                         #   VitalsTrendBuffer, MultiChartManager, ManualEntry,
-│   │                         #   FluidBalance, DrugLog, AlarmSystem, PostopRisk,
+│   │                         #   FluidBalance, DrugLog, AlarmSystem, ClinicalRisk,
 │   │                         #   SimulationMode, BMI calc, derived vitals)
 │   └── manifest.json         # PWA manifest
 ├── requirements.txt           # Python dependencies
@@ -243,18 +262,18 @@ The recommended sequence for a live demo:
 
 1. Open Jarvis → **Disclaimer modal** appears → click "I Understand — Continue"
 2. Enter Gemini API key
-3. **Patient setup** → fill demographics (65yo Male), procedure (total hip replacement), ASA III, comorbidities (HTN + DM), spinal anesthesia, baseline vitals (HR 72, BP 130/80, SpO₂ 99%)
+3. **Patient setup** → fill demographics (65yo Male), select **Clinical Setting** (e.g. Operating Room), procedure (total hip replacement), ASA III, comorbidities (HTN + DM), spinal anesthesia, baseline vitals (HR 72, BP 130/80, SpO₂ 99%)
 4. Click **Start Monitoring** → dashboard opens with full patient context loaded
 5. Start camera → run **Pre-flight Check** → confirm "Camera Ready"
 6. Position the **ROI bounding box** over the monitor display
 7. Enable **Auto-capture** (3s interval) → Jarvis begins reading vitals
 8. **Or** expand "Manual Vitals Entry" → type in vitals → submit → watch all 4 trend graphs update
-9. Log surgical events using **quick-log buttons** ("★ Induction", "★ Incision", etc.)
+9. Log clinical events using **quick-log buttons** ("★ Induction", "★ Incision", "★ Line Inserted", etc.)
 10. Log drugs using the **Drug Administration panel** ("Propofol 200mg IV")
 11. Track fluid balance — update **Estimated Blood Loss** and **IV Fluids**
 12. Watch Jarvis escalate: **NONE → WATCH → CONCERN → CRITICAL**
 13. At CRITICAL: full-screen red overlay, voice alert, safety alarm badges, clinical insight card with differentials
-14. Click **Calculate Risk** in the Postop Risk panel → see predicted risks
+14. Click **Calculate Risk** in the Clinical Risk panel → see predicted risks
 15. Clinician says (voice): *"250ml fluid bolus given"* → Jarvis logs event, watches for recovery
 16. Vitals recover → trend reversal detected → alert downgrades
 
@@ -270,18 +289,18 @@ Acknowledged transparently for clinical credibility:
 - **OCR accuracy** varies with camera angle, monitor brand, screen brightness
 - **Waveform interpretation** is directional, not diagnostic-grade
 - **3–8 second latency** per Gemini round trip — this is a copilot, not a real-time safety interlock
-- **Postop risk scores** are heuristic estimates, not validated predictive models
+- **Clinical risk scores** are heuristic estimates, not validated predictive models
 - The system **augments, never replaces** the clinician's direct observation
 
 ---
 
 ## Authors
 
-**Dr Bhavna Gupta** — Consultant Anaesthesiologist 
+**Dr Bhavna Gupta** — Consultant Anaesthesiologist & Intensivist
 [LinkedIn](https://www.linkedin.com/in/dr-bhavna-gupta)
 
 **Aayush Gupta** - Staff Data Scientist
 [LinkedIn](https://www.linkedin.com/in/gaaush/)
 
-Project: Jarvis OR Guardian — AI-Assisted Intraoperative Reasoning
-Purpose: Ambient clinical monitoring with multimodal vision, voice, and decision support
+Project: Jarvis OR Guardian — AI-Assisted Clinical Reasoning
+Purpose: Ambient clinical monitoring with multimodal vision, voice, and decision support across all monitored clinical settings

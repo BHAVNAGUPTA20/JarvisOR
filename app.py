@@ -1,6 +1,6 @@
 """
 Jarvis OR Guardian — FastAPI Backend
-Multimodal AI Assistant for Anaesthesia & Critical Care
+Multimodal AI Clinical Monitoring & Decision Support
 """
 
 from fastapi import FastAPI, HTTPException
@@ -55,8 +55,8 @@ class ChatRequest(BaseModel):
 
 # ─── Gemini Prompts ──────────────────────────────────────────
 
-VISION_PROMPT = """You are Jarvis, an AI clinical monitoring assistant in an operating room.
-Analyze this anesthesia workstation / patient monitor image.
+VISION_PROMPT = """You are Jarvis, an AI clinical monitoring assistant.
+Analyze this patient monitor image. The clinical setting may be an operating room, ICU, emergency department, PACU, labor & delivery suite, procedural sedation area, or any monitored clinical environment.
 
 PATIENT BASELINE:
 {baseline}
@@ -64,7 +64,7 @@ PATIENT BASELINE:
 CURRENT CLINICAL CONTEXT:
 {context}
 
-RECENT SURGICAL EVENTS:
+RECENT CLINICAL EVENTS:
 {events}
 
 VITALS TREND (last readings):
@@ -103,8 +103,8 @@ Use CONCERN for two simultaneous mild deviations or waveform abnormality.
 Use WATCH for a single mild deviation.
 Use NONE when all values are within acceptable range."""
 
-PREFLIGHT_PROMPT = """Analyze this image of an anesthesia workstation / patient monitor.
-This is a PRE-FLIGHT camera quality check before surgery.
+PREFLIGHT_PROMPT = """Analyze this image of a patient monitor / clinical display.
+This is a PRE-FLIGHT camera quality check before monitoring begins.
 
 TASK:
 1. Can you clearly read vital sign numbers on the display?
@@ -121,10 +121,10 @@ RESPOND ONLY with raw JSON (no markdown fences):
   "recommendation": ""
 }}"""
 
-CHAT_SYSTEM = """You are Jarvis, an AI clinical copilot in an operating room.
-You provide concise, evidence-based clinical guidance to anaesthesiologists.
-You are aware of the patient's vitals, baseline, surgical events, and vision data.
-If the clinician reports a surgical event, acknowledge it and adjust your interpretation.
+CHAT_SYSTEM = """You are Jarvis, an AI clinical copilot for real-time patient monitoring.
+You provide concise, evidence-based clinical guidance to clinicians across settings — operating rooms, ICUs, emergency departments, PACUs, labor & delivery, and procedural sedation areas.
+You are aware of the patient's vitals, baseline, clinical events, and vision data.
+If the clinician reports a clinical event, acknowledge it and adjust your interpretation.
 Be direct, clinical, and actionable. Use numbered lists where appropriate."""
 
 SAFETY_PROMPT = """You are Jarvis, an AI safety monitor. A physiological alert has been triggered.

@@ -183,11 +183,21 @@ async def analyze_frame(req: AnalyzeRequest):
     else:
         baseline_str = json.dumps(req.baseline) if req.baseline else "No baseline set"
         ctx = req.patient_context or {}
-        context_str = (
-            f"Patient: {ctx.get('age', 'N/A')}yo | "
-            f"Procedure: {ctx.get('procedure', 'N/A')} | "
-            f"Comorbidities: {ctx.get('comorbidities', 'N/A')}"
-        )
+        demo_parts = [f"{ctx.get('age', 'N/A')}yo {ctx.get('sex', '')}"]
+        if ctx.get('weight'): demo_parts.append(f"{ctx['weight']}kg")
+        if ctx.get('bmi'): demo_parts.append(f"BMI {ctx['bmi']}")
+        if ctx.get('asa'): demo_parts.append(ctx['asa'])
+        context_parts = [
+            f"Patient: {' | '.join(demo_parts)}",
+            f"Procedure: {ctx.get('procedure', 'N/A')} ({ctx.get('urgency', 'N/A')})",
+            f"Anesthesia: {ctx.get('anesthesia_technique', 'N/A')}",
+            f"Comorbidities: {ctx.get('comorbidities', 'N/A')}",
+        ]
+        if ctx.get('allergies'): context_parts.append(f"Allergies: {ctx['allergies']}")
+        if ctx.get('difficult_airway') == 'Yes': context_parts.append("⚠ Anticipated difficult airway")
+        if ctx.get('position'): context_parts.append(f"Position: {ctx['position']}")
+        if ctx.get('monitoring_plan'): context_parts.append(f"Monitoring: {ctx['monitoring_plan']}")
+        context_str = " | ".join(context_parts)
         events_list = req.surgical_events or []
         events_str = "\n".join(f"- {e}" for e in events_list) or "None logged"
         trend_str = req.trend_summary or "No trend data yet"

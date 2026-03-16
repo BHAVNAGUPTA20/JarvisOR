@@ -1,7 +1,9 @@
 /* ═══════════════════════════════════════════════════════════
    Jarvis OR Guardian — Client Application
    Camera capture, ROI cropping, simulation mode,
-   trend tracking, alert engine, voice, chat
+   trend tracking, alert engine, voice, chat,
+   manual vitals entry, fluid balance, drug log,
+   alarm system, postop risk prediction
    ═══════════════════════════════════════════════════════════ */
 
 const $ = (sel) => document.querySelector(sel);
@@ -26,6 +28,14 @@ const state = {
     trendWindowSize: 10,
     roiEnabled: true,
     simMode: false,
+    fluidBalance: { ebl: 0, ivf: 0, blood: 0, urine: 0 },
+    fluidLog: [],
+    drugLog: [],
+    activeAlarms: [],
+    alarmThresholds: {
+        mapLow: 65, spo2Low: 92, etco2Low: 25, etco2High: 50,
+        hrLow: 45, hrHigh: 130, siHigh: 0.9, tempHigh: 38.5, tempLow: 35
+    },
 };
 
 // ─── ROI Manager ─────────────────────────────────────────
@@ -377,51 +387,96 @@ class AlertEngine {
     }
 }
 
-// ─── Chart Manager ───────────────────────────────────────
+// ─── Multi-Chart Manager ─────────────────────────────────
 
-class ChartManager {
-    constructor(canvasEl) {
-        this.chart = new Chart(canvasEl, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [
-                    { label: 'HR', data: [], borderColor: '#ef4444', borderWidth: 2, tension: 0.3, pointRadius: 3 },
-                    { label: 'SpO₂', data: [], borderColor: '#06b6d4', borderWidth: 2, tension: 0.3, pointRadius: 3 },
-                    { label: 'MAP', data: [], borderColor: '#22d3ee', borderWidth: 2, tension: 0.3, pointRadius: 3 },
-                    { label: 'EtCO₂', data: [], borderColor: '#a855f7', borderWidth: 2, tension: 0.3, pointRadius: 3 },
-                    { label: 'RR', data: [], borderColor: '#f59e0b', borderWidth: 2, tension: 0.3, pointRadius: 3 },
-                ],
+function createChart(canvasEl, datasets, opts = {}) {
+    return new Chart(canvasEl, {
+        type: 'line',
+        data: { labels: [], datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top', labels: { color: '#94a3b8', usePointStyle: true, padding: 12, font: { size: 10 } } },
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'top', labels: { color: '#94a3b8', usePointStyle: true, padding: 16, font: { size: 11 } } },
+            scales: {
+                x: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(30,58,95,0.3)' } },
+                y: {
+                    ticks: { color: '#64748b', font: { size: 9 } },
+                    grid: { color: 'rgba(30,58,95,0.3)' },
+                    ...(opts.yMin != null ? { min: opts.yMin } : {}),
+                    ...(opts.yMax != null ? { max: opts.yMax } : {}),
                 },
-                scales: {
-                    x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(30,58,95,0.3)' } },
-                    y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(30,58,95,0.3)' } },
-                },
-                animation: { duration: 400 },
             },
-        });
+            animation: { duration: 400 },
+        },
+    });
+}
+
+class MultiChartManager {
+    constructor() {
+        this.hemo = createChart($('#hemo-chart'), [
+            { label: 'HR (bpm)', data: [], borderColor: '#ef4444', borderWidth: 2, tension: 0.3, pointRadius: 2 },
+            { label: 'MAP (mmHg)', data: [], borderColor: '#22d3ee', borderWidth: 2, tension: 0.3, pointRadius: 2 },
+            { label: 'SBP (mmHg)', data: [], borderColor: '#10b981', borderWidth: 2, tension: 0.3, pointRadius: 2, borderDash: [4, 2] },
+        ]);
+        this.resp = createChart($('#resp-chart'), [
+            { label: 'SpO₂ (%)', data: [], borderColor: '#06b6d4', borderWidth: 2, tension: 0.3, pointRadius: 2 },
+            { label: 'EtCO₂ (mmHg)', data: [], borderColor: '#a855f7', borderWidth: 2, tension: 0.3, pointRadius: 2 },
+            { label: 'RR (/min)', data: [], borderColor: '#f59e0b', borderWidth: 2, tension: 0.3, pointRadius: 2 },
+        ]);
+        this.temp = createChart($('#temp-chart'), [
+            { label: 'Temp (°C)', data: [], borderColor: '#f97316', borderWidth: 2, tension: 0.3, pointRadius: 3, fill: true, backgroundColor: 'rgba(249,115,22,0.08)' },
+        ]);
+        this.fluidSI = createChart($('#fluid-si-chart'), [
+            { label: 'Est. Blood Loss (ml)', data: [], borderColor: '#ef4444', borderWidth: 2, tension: 0.3, pointRadius: 2, yAxisID: 'y' },
+            { label: 'IV Fluids (ml)', data: [], borderColor: '#10b981', borderWidth: 2, tension: 0.3, pointRadius: 2, yAxisID: 'y' },
+            { label: 'Shock Index', data: [], borderColor: '#ec4899', borderWidth: 2, tension: 0.3, pointRadius: 2, yAxisID: 'y1' },
+        ]);
+
+        this.fluidSI.options.scales.y1 = {
+            position: 'right',
+            ticks: { color: '#ec4899', font: { size: 9 } },
+            grid: { drawOnChartArea: false },
+        };
+        this.fluidSI.update();
     }
 
     update(history) {
-        const labels = history.map((_, i) => `#${i + 1}`);
-        this.chart.data.labels = labels;
-        const keys = ['hr', 'spo2', 'map', 'etco2', 'rr'];
-        keys.forEach((key, idx) => {
-            this.chart.data.datasets[idx].data = history.map(r => r[key] ?? null);
+        const labels = history.map(r => {
+            const d = new Date(r.timestamp);
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         });
-        this.chart.update();
+
+        this.hemo.data.labels = labels;
+        this.hemo.data.datasets[0].data = history.map(r => r.hr ?? null);
+        this.hemo.data.datasets[1].data = history.map(r => r.map ?? null);
+        this.hemo.data.datasets[2].data = history.map(r => r.sbp ?? null);
+        this.hemo.update();
+
+        this.resp.data.labels = labels;
+        this.resp.data.datasets[0].data = history.map(r => r.spo2 ?? null);
+        this.resp.data.datasets[1].data = history.map(r => r.etco2 ?? null);
+        this.resp.data.datasets[2].data = history.map(r => r.rr ?? null);
+        this.resp.update();
+
+        this.temp.data.labels = labels;
+        this.temp.data.datasets[0].data = history.map(r => r.temp ?? null);
+        this.temp.update();
+
+        this.fluidSI.data.labels = labels;
+        this.fluidSI.data.datasets[0].data = history.map(r => r.ebl ?? null);
+        this.fluidSI.data.datasets[1].data = history.map(r => r.ivf ?? null);
+        this.fluidSI.data.datasets[2].data = history.map(r => r.si ?? null);
+        this.fluidSI.update();
     }
 
     clear() {
-        this.chart.data.labels = [];
-        this.chart.data.datasets.forEach(ds => { ds.data = []; });
-        this.chart.update();
+        [this.hemo, this.resp, this.temp, this.fluidSI].forEach(chart => {
+            chart.data.labels = [];
+            chart.data.datasets.forEach(ds => { ds.data = []; });
+            chart.update();
+        });
     }
 }
 
@@ -481,6 +536,18 @@ class APIClient {
     }
 }
 
+// ─── Derived Vitals Calculator ───────────────────────────
+
+function calcMAP(sbp, dbp) {
+    if (sbp == null || dbp == null) return null;
+    return Math.round(dbp + (sbp - dbp) / 3);
+}
+
+function calcShockIndex(hr, sbp) {
+    if (hr == null || sbp == null || sbp === 0) return null;
+    return +(hr / sbp).toFixed(2);
+}
+
 // ─── Main Application ────────────────────────────────────
 
 class JarvisApp {
@@ -489,13 +556,14 @@ class JarvisApp {
         this.roi = new ROIManager($('#camera-viewport'), $('#roi-box'));
         this.trendBuffer = new VitalsTrendBuffer(state.trendWindowSize);
         this.alerts = new AlertEngine();
-        this.chart = new ChartManager($('#trend-chart'));
+        this.charts = new MultiChartManager();
         this.api = new APIClient();
         this.simClickCount = 0;
         this.simClickTimer = null;
     }
 
     init() {
+        this.bindDisclaimer();
         this.bindSetup();
         this.bindCamera();
         this.bindROI();
@@ -504,29 +572,98 @@ class JarvisApp {
         this.bindEvents();
         this.bindSettings();
         this.bindCriticalOverlay();
+        this.bindManualEntry();
+        this.bindFluidBalance();
+        this.bindDrugLog();
+        this.bindAlarmPanel();
+        this.bindPostopRisk();
+    }
+
+    // ── Disclaimer ──
+
+    bindDisclaimer() {
+        const modal = $('#disclaimer-modal');
+        const acceptBtn = $('#disclaimer-accept');
+
+        acceptBtn.addEventListener('click', () => {
+            modal.classList.add('hidden');
+            $('#setup-panel').classList.remove('hidden');
+        });
     }
 
     // ── Setup ──
 
     bindSetup() {
+        this.bindSectionToggles();
+        this.bindBMICalc();
+        this.bindComorbidToggle();
+
         $('#start-monitoring').addEventListener('click', () => {
             const apiKey = $('#api-key').value.trim();
             if (!apiKey) { alert('Please enter your Gemini API key'); return; }
 
+            const age = $('#patient-age').value.trim();
+            const sex = $('#patient-sex').value;
+            const procedure = $('#patient-procedure').value.trim();
+            const anesthesia = $('#patient-anesthesia').value;
+            const baseHR = $('#base-hr').value.trim();
+            const baseSBP = $('#base-sbp').value.trim();
+            const baseDBP = $('#base-dbp').value.trim();
+            const baseSpo2 = $('#base-spo2').value.trim();
+
+            if (!age || !sex) { alert('Please fill Age and Sex (required fields)'); return; }
+            if (!procedure) { alert('Please fill Procedure / Surgery Name (required field)'); return; }
+            if (!anesthesia) { alert('Please select Planned Anesthesia Technique (required field)'); return; }
+            if (!baseHR || !baseSBP || !baseDBP || !baseSpo2) { alert('Please fill mandatory baseline vitals: HR, SBP, DBP, SpO₂'); return; }
+
             state.apiKey = apiKey;
+
+            const comorbidities = this.collectComorbidities();
+            const medications = this.collectCheckboxes('medications');
+            const monitoring = this.collectCheckboxes('monitoring');
+            const medControlled = document.querySelector('input[name="med-controlled"]:checked')?.value || 'yes';
+
             state.patientContext = {
-                age: $('#patient-age').value,
-                procedure: $('#patient-procedure').value,
-                comorbidities: $('#patient-comorbidities').value,
+                age, sex,
+                weight: $('#patient-weight').value || null,
+                height: $('#patient-height').value || null,
+                bmi: $('#patient-bmi').value || null,
+                procedure,
+                specialty: $('#patient-specialty').value || null,
+                urgency: $('#patient-urgency').value || null,
+                duration: $('#patient-duration').value || null,
+                position: $('#patient-position').value || null,
+                asa: $('#patient-asa').value || null,
+                diagnosis: $('#patient-diagnosis').value || null,
+                allergies: $('#patient-allergies').value || null,
+                comorbidities: comorbidities.length ? comorbidities.join(', ') : 'None',
+                medication_controlled: medControlled,
+                medications: medications.length ? medications.join(', ') : 'None',
+                other_medications: $('#med-other-text').value || null,
+                anesthesia_technique: anesthesia,
+                airway_assessment: $('#patient-airway-assessment').value || null,
+                difficult_airway: $('#patient-difficult-airway').value || 'No',
+                monitoring_plan: monitoring.length ? monitoring.join(', ') : 'Standard monitoring',
+                pregnancy: $('#patient-pregnancy').value || 'N/A',
+                npo_hours: $('#patient-npo').value || null,
+                blood_group: $('#patient-blood-group').value || null,
+                blood_products: $('#patient-blood-products').value || null,
+                icu_planned: $('#patient-icu').value || 'No',
+                notes: $('#patient-notes').value || null,
             };
+
             state.baseline = {
-                hr: +$('#base-hr').value,
-                spo2: +$('#base-spo2').value,
-                sbp: +$('#base-sbp').value,
-                dbp: +$('#base-dbp').value,
-                etco2: +$('#base-etco2').value,
-                rr: +$('#base-rr').value,
+                hr: +baseHR,
+                spo2: +baseSpo2,
+                sbp: +baseSBP,
+                dbp: +baseDBP,
+                etco2: +$('#base-etco2').value || null,
+                rr: +$('#base-rr').value || null,
+                temp: +$('#base-temp').value || null,
             };
+
+            state.trendWindowSize = +$('#trend-window').value || 10;
+            this.trendBuffer.windowSize = state.trendWindowSize;
 
             $('#setup-panel').classList.add('hidden');
             $('#dashboard').classList.remove('hidden');
@@ -535,14 +672,157 @@ class JarvisApp {
         });
     }
 
+    bindSectionToggles() {
+        $$('.form-section-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const targetId = header.dataset.toggle;
+                const body = $(`#${targetId}`);
+                if (!body) return;
+                body.classList.toggle('hidden');
+                header.classList.toggle('collapsed');
+            });
+        });
+    }
+
+    bindBMICalc() {
+        const weightEl = $('#patient-weight');
+        const heightEl = $('#patient-height');
+        const bmiEl = $('#patient-bmi');
+        const calc = () => {
+            const w = parseFloat(weightEl.value);
+            const h = parseFloat(heightEl.value);
+            if (w > 0 && h > 0) {
+                bmiEl.value = (w / ((h / 100) ** 2)).toFixed(1);
+            } else {
+                bmiEl.value = '';
+            }
+        };
+        weightEl.addEventListener('input', calc);
+        heightEl.addEventListener('input', calc);
+    }
+
+    bindComorbidToggle() {
+        document.querySelectorAll('input[name="comorbid-toggle"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                const show = document.querySelector('input[name="comorbid-toggle"]:checked')?.value === 'yes';
+                $('#comorbid-list').classList.toggle('hidden', !show);
+            });
+        });
+
+        const otherCb = document.querySelector('#comorbid-list input[value="Other"]');
+        if (otherCb) {
+            otherCb.addEventListener('change', () => {
+                $('#comorbid-other-field').classList.toggle('hidden', !otherCb.checked);
+            });
+        }
+    }
+
+    collectComorbidities() {
+        const hasComorbid = document.querySelector('input[name="comorbid-toggle"]:checked')?.value === 'yes';
+        if (!hasComorbid) return [];
+        const checked = [...document.querySelectorAll('#comorbid-list input[type="checkbox"]:checked')].map(cb => cb.value);
+        const otherIdx = checked.indexOf('Other');
+        if (otherIdx !== -1) {
+            const otherText = $('#comorbid-other-text').value.trim();
+            if (otherText) checked[otherIdx] = otherText;
+            else checked.splice(otherIdx, 1);
+        }
+        return checked;
+    }
+
+    collectCheckboxes(name) {
+        return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(cb => cb.value);
+    }
+
     renderBaselineVitals() {
         if (!state.baseline) return;
         const b = state.baseline;
         $('#val-hr').textContent = b.hr || '--';
         $('#val-spo2').textContent = b.spo2 || '--';
         $('#val-bp').textContent = `${b.sbp || '--'}/${b.dbp || '--'}`;
+        const baseMAP = calcMAP(b.sbp, b.dbp);
+        const baseSI = calcShockIndex(b.hr, b.sbp);
+        $('#val-map').textContent = baseMAP ?? '--';
         $('#val-etco2').textContent = b.etco2 || '--';
         $('#val-rr').textContent = b.rr || '--';
+        $('#val-temp').textContent = b.temp || '--';
+        $('#val-si').textContent = baseSI ?? '--';
+    }
+
+    // ── Manual Data Entry ──
+
+    bindManualEntry() {
+        const header = $('#manual-entry-header');
+        const body = $('#manual-entry-body');
+        const chevron = $('#manual-collapse-chevron');
+
+        header.addEventListener('click', () => {
+            body.classList.toggle('hidden');
+            chevron.textContent = body.classList.contains('hidden') ? '▸' : '▾';
+        });
+
+        const fields = ['manual-hr', 'manual-sbp', 'manual-dbp'];
+        fields.forEach(id => {
+            $(`#${id}`).addEventListener('input', () => this.updateManualDerived());
+        });
+
+        $('#manual-submit').addEventListener('click', () => this.submitManualVitals());
+    }
+
+    updateManualDerived() {
+        const hr = parseFloat($('#manual-hr').value);
+        const sbp = parseFloat($('#manual-sbp').value);
+        const dbp = parseFloat($('#manual-dbp').value);
+        const map = calcMAP(sbp, dbp);
+        const si = calcShockIndex(hr, sbp);
+        $('#manual-map-calc').textContent = map ?? '--';
+        $('#manual-si-calc').textContent = si ?? '--';
+    }
+
+    submitManualVitals() {
+        const hr = parseFloat($('#manual-hr').value) || null;
+        const sbp = parseFloat($('#manual-sbp').value) || null;
+        const dbp = parseFloat($('#manual-dbp').value) || null;
+        const spo2 = parseFloat($('#manual-spo2').value) || null;
+        const etco2 = parseFloat($('#manual-etco2').value) || null;
+        const rr = parseFloat($('#manual-rr').value) || null;
+        const temp = parseFloat($('#manual-temp').value) || null;
+
+        if (!hr && !sbp && !spo2) {
+            alert('Please enter at least HR, SBP, or SpO₂.');
+            return;
+        }
+
+        const map = calcMAP(sbp, dbp);
+        const si = calcShockIndex(hr, sbp);
+
+        const vitals = { hr, spo2, sbp, dbp, map, etco2, rr, temp };
+        const ventilation = {
+            fio2: parseFloat($('#manual-fio2').value) || null,
+            tidal_volume: parseFloat($('#manual-tv').value) || null,
+            peak_airway_pressure: parseFloat($('#manual-paw').value) || null,
+            ventilator_mode: $('#manual-vent-mode').value || null,
+            minute_ventilation: parseFloat($('#manual-mv').value) || null,
+        };
+
+        this.updateVitalsDisplay(vitals);
+        this.pushToTrend({
+            vitals_extracted: vitals,
+            alert_level: 'NONE',
+        }, si);
+
+        this.checkThresholdAlarms(vitals, si);
+        this.updateTrajectory();
+        $('#vitals-timestamp').textContent = new Date().toLocaleTimeString();
+
+        state.surgicalEvents.push({
+            time: new Date().toLocaleTimeString(),
+            event: `[Manual] Vitals recorded — HR:${hr || '-'} BP:${sbp || '-'}/${dbp || '-'} SpO₂:${spo2 || '-'} EtCO₂:${etco2 || '-'} RR:${rr || '-'} Temp:${temp || '-'}`,
+            type: 'info',
+        });
+        this.renderEvents();
+
+        this.appendChat('assistant', `Manual vitals recorded. MAP: ${map ?? 'N/A'} mmHg, Shock Index: ${si ?? 'N/A'}.`);
     }
 
     // ── ROI ──
@@ -568,7 +848,6 @@ class JarvisApp {
         const logoIcon = document.querySelector('.logo-icon');
         const simInput = $('#sim-video-input');
 
-        // Triple-click on logo toggles sim mode
         logoIcon.addEventListener('click', () => {
             this.simClickCount++;
             clearTimeout(this.simClickTimer);
@@ -576,23 +855,16 @@ class JarvisApp {
 
             if (this.simClickCount >= 3) {
                 this.simClickCount = 0;
-                if (state.simMode) {
-                    this.exitSimMode();
-                } else {
-                    simInput.click();
-                }
+                if (state.simMode) this.exitSimMode();
+                else simInput.click();
             }
         });
 
-        // Ctrl+Shift+S keyboard shortcut
         document.addEventListener('keydown', (e) => {
             if (e.ctrlKey && e.shiftKey && e.key === 'S') {
                 e.preventDefault();
-                if (state.simMode) {
-                    this.exitSimMode();
-                } else {
-                    simInput.click();
-                }
+                if (state.simMode) this.exitSimMode();
+                else simInput.click();
             }
         });
 
@@ -606,8 +878,6 @@ class JarvisApp {
 
     enterSimMode(file) {
         this.camera.loadSimVideo(file);
-
-        // Update UI to reflect active state
         $('#camera-toggle').textContent = '⏹ Stop Camera';
         $('#capture-btn').disabled = false;
         $('#preflight-btn').disabled = false;
@@ -615,12 +885,7 @@ class JarvisApp {
         $('#camera-status-dot').className = 'status-dot dot-active';
         $('#camera-placeholder').classList.add('hidden');
         $('#sim-badge').classList.remove('hidden');
-
-        if (state.roiEnabled) {
-            $('#roi-overlay').classList.remove('hidden');
-        }
-
-        // Auto-start 3s capture in sim mode
+        if (state.roiEnabled) $('#roi-overlay').classList.remove('hidden');
         if (!state.autoCapture) {
             $('#auto-capture-toggle').checked = true;
             this.startAutoCapture(3000);
@@ -630,7 +895,6 @@ class JarvisApp {
     exitSimMode() {
         this.camera.exitSim();
         this.stopAutoCapture();
-
         $('#camera-toggle').textContent = '📷 Start Camera';
         $('#capture-btn').disabled = true;
         $('#preflight-btn').disabled = true;
@@ -652,10 +916,7 @@ class JarvisApp {
         const uploadInput = $('#upload-image');
 
         toggleBtn.addEventListener('click', async () => {
-            if (state.simMode) {
-                this.exitSimMode();
-                return;
-            }
+            if (state.simMode) { this.exitSimMode(); return; }
 
             if (this.camera.isActive()) {
                 this.camera.stop();
@@ -687,11 +948,8 @@ class JarvisApp {
         preflightBtn.addEventListener('click', () => this.runPreflight());
 
         autoToggle.addEventListener('change', () => {
-            if (autoToggle.checked) {
-                this.startAutoCapture(+intervalSel.value);
-            } else {
-                this.stopAutoCapture();
-            }
+            if (autoToggle.checked) this.startAutoCapture(+intervalSel.value);
+            else this.stopAutoCapture();
         });
 
         intervalSel.addEventListener('change', () => {
@@ -792,22 +1050,18 @@ class JarvisApp {
         html += ready ? '✅ Camera Ready' : '⚠️ Camera Not Ready';
         html += '</div>';
 
-        if (result.recommendation) {
-            html += `<p style="margin-bottom:12px">${result.recommendation}</p>`;
-        }
+        if (result.recommendation) html += `<p style="margin-bottom:12px">${result.recommendation}</p>`;
 
         if (result.readable_parameters?.length) {
             html += '<p><strong>Readable:</strong></p><ul class="preflight-list">';
             result.readable_parameters.forEach(p => { html += `<li style="color:var(--green)">${p}</li>`; });
             html += '</ul>';
         }
-
         if (result.unreadable_parameters?.length) {
             html += '<p><strong>Not readable:</strong></p><ul class="preflight-list">';
             result.unreadable_parameters.forEach(p => { html += `<li style="color:var(--orange)">${p}</li>`; });
             html += '</ul>';
         }
-
         if (result.quality_issues?.length) {
             html += '<p><strong>Issues:</strong></p><ul class="preflight-list">';
             result.quality_issues.forEach(q => { html += `<li style="color:var(--yellow)">${q}</li>`; });
@@ -816,7 +1070,6 @@ class JarvisApp {
 
         content.innerHTML = html;
         modal.classList.remove('hidden');
-
         if (ready) state.cameraReady = true;
         $('#preflight-close').onclick = () => modal.classList.add('hidden');
     }
@@ -838,13 +1091,29 @@ class JarvisApp {
     onAnalysisResult(analysis) {
         state.lastAnalysis = analysis;
         const level = analysis.alert_level || 'NONE';
+        const vitals = analysis.vitals_extracted || {};
 
-        this.updateVitalsDisplay(analysis.vitals_extracted || {});
+        if (vitals.sbp != null && vitals.dbp != null && vitals.map == null) {
+            vitals.map = calcMAP(vitals.sbp, vitals.dbp);
+        }
+        const si = calcShockIndex(vitals.hr, vitals.sbp);
+
+        this.updateVitalsDisplay(vitals);
         this.updateWaveforms(analysis.waveforms || {});
-        this.pushToTrend(analysis);
+        this.pushToTrend(analysis, si);
         this.renderClinicalCard(analysis);
         this.alerts.trigger(level, analysis);
+        this.checkThresholdAlarms(vitals, si);
         this.updateTrajectory();
+
+        if (si != null) {
+            $('#val-si').textContent = si;
+            if (si > state.alarmThresholds.siHigh) {
+                $('#v-si').classList.add('vital-alert-si');
+            } else {
+                $('#v-si').classList.remove('vital-alert-si');
+            }
+        }
 
         $('#vitals-timestamp').textContent = new Date().toLocaleTimeString();
     }
@@ -863,18 +1132,21 @@ class JarvisApp {
         set('rr', v.rr);
         set('temp', v.temp);
 
+        const si = calcShockIndex(v.hr, v.sbp);
+        set('si', si);
+
         this.highlightAlertVitals(v);
     }
 
     highlightAlertVitals(v) {
         $$('.vital-card').forEach(c => c.classList.remove('vital-alert'));
-        if (!state.baseline) return;
-        const b = state.baseline;
-        if (v.hr != null && (v.hr > 130 || v.hr < 45)) $('#v-hr')?.classList.add('vital-alert');
-        if (v.spo2 != null && v.spo2 < 92) $('#v-spo2')?.classList.add('vital-alert');
-        if (v.sbp != null && v.sbp < b.sbp - 30) $('#v-bp')?.classList.add('vital-alert');
-        if (v.map != null && v.map < 60) $('#v-map')?.classList.add('vital-alert');
-        if (v.etco2 != null && (v.etco2 < 20 || v.etco2 > 50)) $('#v-etco2')?.classList.add('vital-alert');
+        const t = state.alarmThresholds;
+        if (v.hr != null && (v.hr > t.hrHigh || v.hr < t.hrLow)) $('#v-hr')?.classList.add('vital-alert');
+        if (v.spo2 != null && v.spo2 < t.spo2Low) $('#v-spo2')?.classList.add('vital-alert');
+        if (v.sbp != null && state.baseline && v.sbp < state.baseline.sbp - 30) $('#v-bp')?.classList.add('vital-alert');
+        if (v.map != null && v.map < t.mapLow) $('#v-map')?.classList.add('vital-alert');
+        if (v.etco2 != null && (v.etco2 < t.etco2Low || v.etco2 > t.etco2High)) $('#v-etco2')?.classList.add('vital-alert');
+        if (v.temp != null && (v.temp > t.tempHigh || v.temp < t.tempLow)) $('#v-temp')?.classList.add('vital-alert');
     }
 
     updateWaveforms(wf) {
@@ -883,25 +1155,27 @@ class JarvisApp {
         const entries = Object.entries(wf).filter(([, v]) => v);
 
         if (!entries.length) { section.classList.add('hidden'); return; }
-
         section.classList.remove('hidden');
         container.innerHTML = entries.map(([name, desc]) =>
             `<div class="waveform-item"><strong>${name.replace(/_/g, ' ')}:</strong> ${desc}</div>`
         ).join('');
     }
 
-    pushToTrend(analysis) {
+    pushToTrend(analysis, si) {
         const v = analysis.vitals_extracted || {};
         if (!Object.values(v).some(val => val != null)) return;
 
         this.trendBuffer.push(v);
         state.visionHistory.push({
             ...v,
+            si: si ?? calcShockIndex(v.hr, v.sbp),
+            ebl: state.fluidBalance.ebl,
+            ivf: state.fluidBalance.ivf,
             timestamp: Date.now(),
             alert_level: analysis.alert_level || 'NONE',
         });
 
-        this.chart.update(state.visionHistory);
+        this.charts.update(state.visionHistory);
         this.renderDeltas();
     }
 
@@ -954,45 +1228,35 @@ class JarvisApp {
         if (diffs.length) {
             diffSection.classList.remove('hidden');
             $('#card-diff-list').innerHTML = diffs.map(d => `<li>${d}</li>`).join('');
-        } else {
-            diffSection.classList.add('hidden');
-        }
+        } else { diffSection.classList.add('hidden'); }
 
         const checks = analysis.immediate_checks || [];
         const checksSection = $('#card-checks');
         if (checks.length) {
             checksSection.classList.remove('hidden');
             $('#card-checks-list').innerHTML = checks.map(c => `<div class="check-item">${c}</div>`).join('');
-        } else {
-            checksSection.classList.add('hidden');
-        }
+        } else { checksSection.classList.add('hidden'); }
 
         const actions = analysis.suggested_actions || [];
         const actionsSection = $('#card-actions');
         if (actions.length) {
             actionsSection.classList.remove('hidden');
             $('#card-actions-list').innerHTML = actions.map(a => `<div class="action-item">${a}</div>`).join('');
-        } else {
-            actionsSection.classList.add('hidden');
-        }
+        } else { actionsSection.classList.add('hidden'); }
 
         const alarms = analysis.alarms_visible || [];
         const alarmsSection = $('#card-alarms');
         if (alarms.length) {
             alarmsSection.classList.remove('hidden');
             $('#card-alarms-list').innerHTML = alarms.map(a => `<div class="alarm-item">${a}</div>`).join('');
-        } else {
-            alarmsSection.classList.add('hidden');
-        }
+        } else { alarmsSection.classList.add('hidden'); }
 
         const quality = analysis.image_quality_note;
         const qualSection = $('#card-quality');
         if (quality) {
             qualSection.classList.remove('hidden');
             $('#card-quality-text').textContent = quality;
-        } else {
-            qualSection.classList.add('hidden');
-        }
+        } else { qualSection.classList.add('hidden'); }
     }
 
     showSection(sectionId, text, textId) {
@@ -1003,6 +1267,269 @@ class JarvisApp {
         } else {
             el.classList.add('hidden');
         }
+    }
+
+    // ── Fluid Balance ──
+
+    bindFluidBalance() {
+        const updateFluid = (type, inputId) => {
+            const val = parseFloat($(`#${inputId}`).value) || 0;
+            state.fluidBalance[type] = val;
+            state.fluidLog.push({
+                time: new Date().toLocaleTimeString(),
+                type,
+                value: val,
+            });
+            this.renderFluidSummary();
+        };
+
+        $('#fluid-ebl-btn').addEventListener('click', () => updateFluid('ebl', 'fluid-ebl'));
+        $('#fluid-ivf-btn').addEventListener('click', () => updateFluid('ivf', 'fluid-ivf'));
+        $('#fluid-blood-btn').addEventListener('click', () => updateFluid('blood', 'fluid-blood'));
+        $('#fluid-urine-btn').addEventListener('click', () => updateFluid('urine', 'fluid-urine'));
+    }
+
+    renderFluidSummary() {
+        const f = state.fluidBalance;
+        const totalLoss = f.ebl + f.urine;
+        const totalInput = f.ivf + f.blood;
+        const netBalance = totalInput - totalLoss;
+
+        $('#fluid-total-loss').textContent = `${totalLoss} ml`;
+        $('#fluid-total-input').textContent = `${totalInput} ml`;
+        $('#fluid-net-balance').textContent = `${netBalance >= 0 ? '+' : ''}${netBalance} ml`;
+
+        const logEl = $('#fluid-log');
+        logEl.innerHTML = state.fluidLog.slice(-10).reverse().map(entry => {
+            const labels = { ebl: 'Blood Loss', ivf: 'IV Fluids', blood: 'Transfusion', urine: 'Urine' };
+            return `<div class="fluid-log-entry"><span class="fluid-log-time">${entry.time}</span><span>${labels[entry.type]}: ${entry.value} ml</span></div>`;
+        }).join('');
+    }
+
+    // ── Drug Administration Log ──
+
+    bindDrugLog() {
+        $('#drug-log-btn').addEventListener('click', () => {
+            const category = $('#drug-category').value;
+            const name = $('#drug-name').value.trim();
+            const dose = $('#drug-dose').value.trim();
+            const route = $('#drug-route').value.trim();
+
+            if (!name) { alert('Please enter a drug name.'); return; }
+
+            const entry = {
+                time: new Date().toLocaleTimeString(),
+                category: category || 'Other',
+                name,
+                dose,
+                route,
+            };
+
+            state.drugLog.push(entry);
+
+            state.surgicalEvents.push({
+                time: entry.time,
+                event: `[Drug] ${entry.category}: ${name} ${dose} ${route}`.trim(),
+                type: 'drug',
+            });
+
+            this.renderDrugLog();
+            this.renderEvents();
+
+            $('#drug-name').value = '';
+            $('#drug-dose').value = '';
+            $('#drug-route').value = '';
+        });
+    }
+
+    renderDrugLog() {
+        const container = $('#drug-log-list');
+        if (!state.drugLog.length) {
+            container.innerHTML = '<p class="events-empty">No drugs logged yet</p>';
+            return;
+        }
+        container.innerHTML = [...state.drugLog].reverse().map(d =>
+            `<div class="drug-log-entry">
+                <span class="drug-log-time">${d.time}</span>
+                <span class="drug-log-cat">${d.category}</span>
+                <span class="drug-log-detail">${d.name} ${d.dose ? '— ' + d.dose : ''} ${d.route ? '(' + d.route + ')' : ''}</span>
+            </div>`
+        ).join('');
+    }
+
+    // ── Alarm & Safety System ──
+
+    bindAlarmPanel() {
+        const header = $('#alarm-panel-header');
+        const body = $('#alarm-panel-body');
+        const chevron = $('#alarm-collapse-chevron');
+
+        header.addEventListener('click', () => {
+            body.classList.toggle('hidden');
+            chevron.textContent = body.classList.contains('hidden') ? '▸' : '▾';
+        });
+
+        const thresholdFields = [
+            ['alarm-map-low', 'mapLow'], ['alarm-spo2-low', 'spo2Low'],
+            ['alarm-etco2-low', 'etco2Low'], ['alarm-etco2-high', 'etco2High'],
+            ['alarm-hr-low', 'hrLow'], ['alarm-hr-high', 'hrHigh'],
+            ['alarm-si-high', 'siHigh'], ['alarm-temp-high', 'tempHigh'],
+            ['alarm-temp-low', 'tempLow'],
+        ];
+
+        thresholdFields.forEach(([elId, key]) => {
+            $(`#${elId}`).addEventListener('change', (e) => {
+                state.alarmThresholds[key] = parseFloat(e.target.value);
+            });
+        });
+    }
+
+    checkThresholdAlarms(vitals, si) {
+        const t = state.alarmThresholds;
+        const alarms = [];
+
+        if (vitals.map != null && vitals.map < t.mapLow)
+            alarms.push({ msg: `MAP ${vitals.map} < ${t.mapLow} mmHg — Possible hypovolemia or bleeding`, level: 'critical' });
+        if (vitals.spo2 != null && vitals.spo2 < t.spo2Low)
+            alarms.push({ msg: `SpO₂ ${vitals.spo2}% < ${t.spo2Low}% — Hypoxia risk`, level: 'critical' });
+        if (vitals.etco2 != null && vitals.etco2 < t.etco2Low)
+            alarms.push({ msg: `EtCO₂ ${vitals.etco2} < ${t.etco2Low} mmHg — Check ventilation / airway disconnect`, level: 'critical' });
+        if (vitals.etco2 != null && vitals.etco2 > t.etco2High)
+            alarms.push({ msg: `EtCO₂ ${vitals.etco2} > ${t.etco2High} mmHg — Hypoventilation`, level: 'warning' });
+        if (vitals.hr != null && vitals.hr < t.hrLow)
+            alarms.push({ msg: `HR ${vitals.hr} < ${t.hrLow} bpm — Bradycardia`, level: 'critical' });
+        if (vitals.hr != null && vitals.hr > t.hrHigh)
+            alarms.push({ msg: `HR ${vitals.hr} > ${t.hrHigh} bpm — Tachycardia`, level: 'warning' });
+        if (si != null && si > t.siHigh)
+            alarms.push({ msg: `Shock Index ${si} > ${t.siHigh} — Possible shock`, level: 'critical' });
+        if (vitals.temp != null && vitals.temp > t.tempHigh)
+            alarms.push({ msg: `Temp ${vitals.temp}°C > ${t.tempHigh}°C — Possible malignant hyperthermia / infection`, level: 'critical' });
+        if (vitals.temp != null && vitals.temp < t.tempLow)
+            alarms.push({ msg: `Temp ${vitals.temp}°C < ${t.tempLow}°C — Hypothermia`, level: 'warning' });
+
+        state.activeAlarms = alarms;
+        this.renderActiveAlarms(alarms);
+        this.renderSafetyBar(alarms);
+    }
+
+    renderActiveAlarms(alarms) {
+        const container = $('#active-alarms');
+        if (!alarms.length) {
+            container.innerHTML = '<p class="events-empty">No active alarms</p>';
+            return;
+        }
+        container.innerHTML = alarms.map(a =>
+            `<div class="active-alarm-item alarm-active">🚨 ${a.msg}</div>`
+        ).join('');
+    }
+
+    renderSafetyBar(alarms) {
+        const bar = $('#safety-alarms-bar');
+        const list = $('#safety-alarms-list');
+
+        if (!alarms.length) {
+            bar.classList.add('hidden');
+            return;
+        }
+
+        bar.classList.remove('hidden');
+        list.innerHTML = alarms.map(a =>
+            `<span class="safety-alarm-badge alarm-${a.level}">🚨 ${a.msg.split('—')[0].trim()}</span>`
+        ).join('');
+    }
+
+    // ── Postoperative Risk Prediction ──
+
+    bindPostopRisk() {
+        $('#postop-calculate').addEventListener('click', () => this.calculatePostopRisk());
+    }
+
+    calculatePostopRisk() {
+        const ctx = state.patientContext;
+        const b = state.baseline;
+        const history = state.visionHistory;
+        const fluids = state.fluidBalance;
+
+        if (history.length < 3) {
+            alert('Insufficient intraoperative data. Please record at least 3 vitals readings.');
+            return;
+        }
+
+        let hypotensionScore = 0;
+        let icuScore = 0;
+        let sepsisScore = 0;
+        let akiScore = 0;
+
+        const age = parseInt(ctx.age) || 0;
+        if (age > 70) { hypotensionScore += 20; icuScore += 15; sepsisScore += 10; akiScore += 15; }
+        else if (age > 55) { hypotensionScore += 10; icuScore += 8; sepsisScore += 5; akiScore += 10; }
+
+        const asa = ctx.asa || '';
+        if (asa.includes('III')) { icuScore += 15; akiScore += 10; }
+        if (asa.includes('IV') || asa.includes('V')) { icuScore += 30; akiScore += 20; sepsisScore += 10; }
+
+        if (ctx.urgency === 'Emergency') { icuScore += 15; sepsisScore += 10; }
+
+        const comorbidities = ctx.comorbidities || '';
+        if (comorbidities.includes('kidney')) akiScore += 20;
+        if (comorbidities.includes('Hypertension')) { hypotensionScore += 10; akiScore += 5; }
+        if (comorbidities.includes('Heart failure')) { hypotensionScore += 15; icuScore += 15; }
+        if (comorbidities.includes('Diabetes')) { sepsisScore += 5; akiScore += 5; }
+
+        const mapValues = history.map(r => r.map).filter(v => v != null);
+        const lowMapReadings = mapValues.filter(v => v < 65).length;
+        if (lowMapReadings > 0) {
+            const pct = (lowMapReadings / mapValues.length) * 100;
+            hypotensionScore += Math.min(40, pct * 1.5);
+            akiScore += Math.min(25, pct);
+        }
+
+        const siValues = history.map(r => r.si).filter(v => v != null);
+        const highSI = siValues.filter(v => v > 0.9).length;
+        if (highSI > 0) { hypotensionScore += 15; icuScore += 10; }
+
+        if (fluids.ebl > 1000) { hypotensionScore += 20; icuScore += 15; akiScore += 15; }
+        else if (fluids.ebl > 500) { hypotensionScore += 10; icuScore += 5; akiScore += 5; }
+
+        if (fluids.urine > 0 && fluids.urine < 100) akiScore += 20;
+
+        const tempValues = history.map(r => r.temp).filter(v => v != null);
+        const highTemp = tempValues.filter(v => v > 38.5).length;
+        if (highTemp > 0) sepsisScore += 20;
+
+        const critEvents = state.surgicalEvents.filter(e =>
+            e.event.toLowerCase().includes('bleeding') || e.event.toLowerCase().includes('hypotension') ||
+            e.event.toLowerCase().includes('cardiac') || e.event.toLowerCase().includes('sepsis')
+        );
+        if (critEvents.length > 0) { icuScore += critEvents.length * 10; }
+
+        const risks = [
+            { name: 'Postoperative Hypotension', score: Math.min(100, Math.round(hypotensionScore)) },
+            { name: 'ICU Admission', score: Math.min(100, Math.round(icuScore)) },
+            { name: 'Sepsis Risk', score: Math.min(100, Math.round(sepsisScore)) },
+            { name: 'Acute Kidney Injury', score: Math.min(100, Math.round(akiScore)) },
+        ];
+
+        this.renderPostopRisk(risks);
+    }
+
+    renderPostopRisk(risks) {
+        const container = $('#postop-body');
+        const riskClass = (s) => s >= 70 ? 'critical' : s >= 45 ? 'high' : s >= 20 ? 'moderate' : 'low';
+        const riskLabel = (s) => s >= 70 ? 'HIGH' : s >= 45 ? 'MODERATE-HIGH' : s >= 20 ? 'MODERATE' : 'LOW';
+
+        container.innerHTML = `<div class="postop-grid">
+            ${risks.map(r => `
+                <div class="postop-risk-item">
+                    <h4>${r.name}</h4>
+                    <div class="postop-risk-bar"><div class="postop-risk-fill risk-${riskClass(r.score)}" style="width:${r.score}%"></div></div>
+                    <span class="postop-risk-label risk-${riskClass(r.score)}">${riskLabel(r.score)} (${r.score}%)</span>
+                </div>
+            `).join('')}
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:12px;text-align:center;">
+            Risk scores are estimated based on patient baseline, intraoperative vitals trends, fluid balance, and surgical events. These are for decision support only.
+        </p>`;
     }
 
     // ── Chat ──
@@ -1048,9 +1575,8 @@ class JarvisApp {
                 const lines = chunk.split('\n');
                 for (const line of lines) {
                     if (!line.startsWith('data: ')) continue;
-                    const data = line.slice(6);
                     try {
-                        const parsed = JSON.parse(data);
+                        const parsed = JSON.parse(line.slice(6));
                         if (parsed.done) break;
                         if (parsed.text) {
                             fullText += parsed.text;
@@ -1062,7 +1588,6 @@ class JarvisApp {
 
             if (!fullText) bubbleEl.textContent = '(No response)';
             state.chatHistory.push({ role: 'user', content: message }, { role: 'assistant', content: fullText });
-
             this.detectSurgicalEvent(message);
         } catch (err) {
             bubbleEl.textContent = `Error: ${err.message}`;
@@ -1085,17 +1610,40 @@ class JarvisApp {
     buildContext() {
         const parts = [];
         const ctx = state.patientContext;
-        parts.push(`Patient: ${ctx.age}yo | Procedure: ${ctx.procedure} | Comorbidities: ${ctx.comorbidities}`);
+
+        let demographics = `Patient: ${ctx.age}yo ${ctx.sex || ''}`;
+        if (ctx.weight) demographics += ` | ${ctx.weight}kg`;
+        if (ctx.bmi) demographics += ` (BMI ${ctx.bmi})`;
+        if (ctx.asa) demographics += ` | ${ctx.asa}`;
+        parts.push(demographics);
+
+        let procedureInfo = `Procedure: ${ctx.procedure}`;
+        if (ctx.urgency) procedureInfo += ` (${ctx.urgency})`;
+        if (ctx.anesthesia_technique) procedureInfo += ` | Anesthesia: ${ctx.anesthesia_technique}`;
+        if (ctx.position) procedureInfo += ` | Position: ${ctx.position}`;
+        parts.push(procedureInfo);
+
+        parts.push(`Comorbidities: ${ctx.comorbidities}`);
+        if (ctx.medications && ctx.medications !== 'None') {
+            parts.push(`Medications: ${ctx.medications} (Controlled: ${ctx.medication_controlled})`);
+        }
+        if (ctx.allergies) parts.push(`Allergies: ${ctx.allergies}`);
+        if (ctx.difficult_airway === 'Yes') parts.push('⚠ Anticipated difficult airway');
+        if (ctx.monitoring_plan) parts.push(`Monitoring: ${ctx.monitoring_plan}`);
 
         if (state.baseline) {
             const b = state.baseline;
-            parts.push(`Baseline: HR ${b.hr}, SpO2 ${b.spo2}%, BP ${b.sbp}/${b.dbp}, EtCO2 ${b.etco2}, RR ${b.rr}`);
+            let bl = `Baseline: HR ${b.hr}, SpO2 ${b.spo2}%, BP ${b.sbp}/${b.dbp}`;
+            if (b.etco2) bl += `, EtCO2 ${b.etco2}`;
+            if (b.rr) bl += `, RR ${b.rr}`;
+            if (b.temp) bl += `, Temp ${b.temp}°C`;
+            parts.push(bl);
         }
 
         if (state.lastAnalysis) {
             const la = state.lastAnalysis;
-            parts.push(`Latest vision read: ${JSON.stringify(la.vitals_extracted || {})}`);
-            parts.push(`Vision alert: ${la.alert_level || 'NONE'}`);
+            parts.push(`Latest vitals: ${JSON.stringify(la.vitals_extracted || {})}`);
+            parts.push(`Alert level: ${la.alert_level || 'NONE'}`);
             if (la.trend_interpretation) parts.push(`Trend: ${la.trend_interpretation}`);
         }
 
@@ -1104,18 +1652,28 @@ class JarvisApp {
             parts.push(`Trend summary: ${JSON.stringify(trend)}`);
         }
 
+        const f = state.fluidBalance;
+        parts.push(`Fluid balance: EBL ${f.ebl}ml, IVF ${f.ivf}ml, Blood ${f.blood}ml, Urine ${f.urine}ml`);
+
+        if (state.drugLog.length) {
+            parts.push('Drug log:\n' + state.drugLog.slice(-5).map(d => `- ${d.time}: ${d.category} — ${d.name} ${d.dose} ${d.route}`).join('\n'));
+        }
+
         if (state.surgicalEvents.length) {
-            parts.push('Surgical events:\n' + state.surgicalEvents.slice(-5).map(e => `- ${e.time}: ${e.event}`).join('\n'));
+            parts.push('Surgical events:\n' + state.surgicalEvents.slice(-8).map(e => `- ${e.time}: ${e.event}`).join('\n'));
+        }
+
+        if (state.activeAlarms.length) {
+            parts.push('ACTIVE ALARMS:\n' + state.activeAlarms.map(a => `- ${a.msg}`).join('\n'));
         }
 
         return parts.join('\n\n');
     }
 
     detectSurgicalEvent(text) {
-        const keywords = ['bolus', 'incision', 'clamp', 'intubat', 'extubat', 'tourniquet', 'blood', 'suture', 'induction'];
+        const keywords = ['bolus', 'incision', 'clamp', 'intubat', 'extubat', 'tourniquet', 'blood', 'suture', 'induction', 'bleeding', 'arrest'];
         if (keywords.some(kw => text.toLowerCase().includes(kw))) {
-            const event = { time: new Date().toLocaleTimeString(), event: `[Voice] ${text}` };
-            state.surgicalEvents.push(event);
+            state.surgicalEvents.push({ time: new Date().toLocaleTimeString(), event: `[Voice] ${text}`, type: 'voice' });
             this.renderEvents();
         }
     }
@@ -1159,7 +1717,7 @@ class JarvisApp {
         recognition.start();
     }
 
-    // ── Surgical Events ──
+    // ── Surgical Events (Enhanced) ──
 
     bindEvents() {
         const input = $('#event-input');
@@ -1169,7 +1727,7 @@ class JarvisApp {
         logBtn.addEventListener('click', () => {
             const text = input.value.trim();
             if (!text) return;
-            state.surgicalEvents.push({ time: new Date().toLocaleTimeString(), event: text });
+            state.surgicalEvents.push({ time: new Date().toLocaleTimeString(), event: text, type: 'custom' });
             input.value = '';
             this.renderEvents();
         });
@@ -1181,9 +1739,32 @@ class JarvisApp {
         clearBtn.addEventListener('click', () => {
             state.visionHistory = [];
             this.trendBuffer = new VitalsTrendBuffer(state.trendWindowSize);
-            this.chart.clear();
+            this.charts.clear();
             $('#trend-deltas').classList.add('hidden');
             this.updateTrajectory();
+        });
+
+        $$('.quick-event-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const eventText = btn.dataset.event;
+                const isCritical = btn.classList.contains('quick-event-critical');
+                const isWarn = btn.classList.contains('quick-event-warn');
+                const type = isCritical ? 'critical' : isWarn ? 'warn' : 'event';
+
+                state.surgicalEvents.push({
+                    time: new Date().toLocaleTimeString(),
+                    event: eventText,
+                    type,
+                });
+                this.renderEvents();
+
+                btn.style.transform = 'scale(0.9)';
+                btn.style.opacity = '0.6';
+                setTimeout(() => {
+                    btn.style.transform = '';
+                    btn.style.opacity = '';
+                }, 300);
+            });
         });
     }
 
@@ -1194,9 +1775,10 @@ class JarvisApp {
             return;
         }
 
-        container.innerHTML = [...state.surgicalEvents].reverse().map(e =>
-            `<div class="event-item"><span class="event-time">${e.time}</span><span>${e.event}</span></div>`
-        ).join('');
+        container.innerHTML = [...state.surgicalEvents].reverse().map(e => {
+            const cls = e.type === 'critical' ? 'event-critical' : e.type === 'warn' ? 'event-warn' : '';
+            return `<div class="event-item ${cls}"><span class="event-time">${e.time}</span><span>${e.event}</span></div>`;
+        }).join('');
     }
 
     // ── Settings ──
@@ -1210,8 +1792,17 @@ class JarvisApp {
                 $('#settings-api-key').value = state.apiKey || '';
                 $('#settings-window').value = state.trendWindowSize;
                 $('#settings-age').value = state.patientContext.age || '';
+                $('#settings-sex').value = state.patientContext.sex || '';
                 $('#settings-procedure').value = state.patientContext.procedure || '';
+                $('#settings-anesthesia').value = state.patientContext.anesthesia_technique || '';
                 $('#settings-comorbidities').value = state.patientContext.comorbidities || '';
+                $('#settings-allergies').value = state.patientContext.allergies || '';
+                if (state.baseline) {
+                    $('#settings-hr').value = state.baseline.hr || '';
+                    $('#settings-spo2').value = state.baseline.spo2 || '';
+                    $('#settings-sbp').value = state.baseline.sbp || '';
+                    $('#settings-dbp').value = state.baseline.dbp || '';
+                }
             }
         });
 
@@ -1223,8 +1814,20 @@ class JarvisApp {
             state.trendWindowSize = +$('#settings-window').value || 10;
             this.trendBuffer.windowSize = state.trendWindowSize;
             state.patientContext.age = $('#settings-age').value;
+            state.patientContext.sex = $('#settings-sex').value;
             state.patientContext.procedure = $('#settings-procedure').value;
+            state.patientContext.anesthesia_technique = $('#settings-anesthesia').value;
             state.patientContext.comorbidities = $('#settings-comorbidities').value;
+            state.patientContext.allergies = $('#settings-allergies').value;
+            const hr = +$('#settings-hr').value;
+            const spo2 = +$('#settings-spo2').value;
+            const sbp = +$('#settings-sbp').value;
+            const dbp = +$('#settings-dbp').value;
+            if (hr > 0) state.baseline.hr = hr;
+            if (spo2 > 0) state.baseline.spo2 = spo2;
+            if (sbp > 0) state.baseline.sbp = sbp;
+            if (dbp > 0) state.baseline.dbp = dbp;
+            this.renderBaselineVitals();
             drawer.classList.add('hidden');
         });
 
@@ -1235,6 +1838,7 @@ class JarvisApp {
             $('#dashboard').classList.add('hidden');
             $('#setup-panel').classList.remove('hidden');
             $('#alert-banner').classList.add('hidden');
+            $('#safety-alarms-bar').classList.add('hidden');
             $('#connection-dot').className = 'status-dot dot-disconnected';
             drawer.classList.add('hidden');
         });

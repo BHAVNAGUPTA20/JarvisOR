@@ -212,10 +212,16 @@ async def analyze_frame(req: AnalyzeRequest):
             trend=trend_str,
         )
 
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=[prompt, img],
-    )
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[prompt, img],
+        )
+    except Exception as e:
+        detail = str(e)
+        if "API_KEY_INVALID" in detail or "API key not valid" in detail:
+            raise HTTPException(status_code=401, detail="Invalid Gemini API key. Please check your key and try again.")
+        raise HTTPException(status_code=502, detail=f"Gemini API error: {detail}")
 
     try:
         return parse_gemini_json(response.text)
@@ -229,21 +235,27 @@ async def chat_endpoint(req: ChatRequest):
 
     prompt = f"{CHAT_SYSTEM}\n\nCLINICAL CONTEXT:\n{req.context}\n\nCLINICIAN: {req.message}"
 
-    if req.stream:
-        def generate():
-            for chunk in client.models.generate_content_stream(
-                model=GEMINI_MODEL, contents=prompt
-            ):
-                if chunk.text:
-                    yield f"data: {json.dumps({'text': chunk.text})}\n\n"
-            yield f"data: {json.dumps({'done': True})}\n\n"
+    try:
+        if req.stream:
+            def generate():
+                for chunk in client.models.generate_content_stream(
+                    model=GEMINI_MODEL, contents=prompt
+                ):
+                    if chunk.text:
+                        yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+                yield f"data: {json.dumps({'done': True})}\n\n"
 
-        return StreamingResponse(generate(), media_type="text/event-stream")
+            return StreamingResponse(generate(), media_type="text/event-stream")
 
-    response = client.models.generate_content(
-        model=GEMINI_MODEL, contents=prompt
-    )
-    return {"response": response.text}
+        response = client.models.generate_content(
+            model=GEMINI_MODEL, contents=prompt
+        )
+        return {"response": response.text}
+    except Exception as e:
+        detail = str(e)
+        if "API_KEY_INVALID" in detail or "API key not valid" in detail:
+            raise HTTPException(status_code=401, detail="Invalid Gemini API key. Please check your key and try again.")
+        raise HTTPException(status_code=502, detail=f"Gemini API error: {detail}")
 
 
 class SafetyRequest(BaseModel):
@@ -256,10 +268,16 @@ class SafetyRequest(BaseModel):
 async def safety_check(req: SafetyRequest):
     client = get_client(req.api_key)
     prompt = SAFETY_PROMPT.format(alert_data=req.alert_data, context=req.context)
-    response = client.models.generate_content(
-        model=GEMINI_MODEL, contents=prompt
-    )
-    return {"response": response.text}
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL, contents=prompt
+        )
+        return {"response": response.text}
+    except Exception as e:
+        detail = str(e)
+        if "API_KEY_INVALID" in detail or "API key not valid" in detail:
+            raise HTTPException(status_code=401, detail="Invalid Gemini API key. Please check your key and try again.")
+        raise HTTPException(status_code=502, detail=f"Gemini API error: {detail}")
 
 
 @app.get("/health")

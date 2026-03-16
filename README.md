@@ -46,12 +46,12 @@ The system adapts to the clinical context: select your setting (OR, ICU, ED, PAC
 
 | # | Section | Key Fields |
 |---|---|---|
-| 1 | Patient Demographics | Age★, Sex★, Weight, Height, BMI (auto-calculated) |
+| 1 | Patient Demographics | Patient ID, Age★, Sex★, Weight, Height, BMI (auto-calculated) |
 | 2 | Clinical Setting & Procedure | **Clinical Setting★** (Operating Room, ICU, ED, PACU, L&D, Procedural Sedation, Transport, Other), Surgery/Procedure name★, Specialty, Elective/Emergency, Duration, Position |
 | 3 | Clinical Risk | ASA Physical Status (I–VI), Primary diagnosis, Allergies |
 | 4 | Comorbidities | Major comorbidities★ toggle with 12 condition checkboxes |
 | 5 | Medication Status | Controlled Y/N, 7 medication categories |
-| 6 | Airway & Sedation / Anesthesia | Technique★ (None / Monitored care only, Procedural sedation, Conscious sedation, ICU sedation, General, Spinal, Epidural, Regional block, Combined), Assessment, Difficult airway flag |
+| 6 | Airway & Sedation / Anesthesia | Comprehensive multi-category selection: **Neuraxial** (Spinal, Epidural, CSE, Segmental spinal, Continuous spinal, Caudal), **Peripheral Regional** — Upper limb (Interscalene, Supraclavicular, Infraclavicular, Axillary), Lower limb (Femoral, Sciatic, Popliteal, Adductor canal), Truncal/Fascial (TAP, Rectus sheath, Paravertebral, Erector spinae, Quadratus lumborum), Local (Infiltration, Field block), **General** (ETT, LMA, TIVA, Balanced), **Sedation/MAC** (Minimal, Moderate, Deep), **Combined**, Airway assessment, Difficult airway flag |
 | 7 | Monitoring Plan | Standard, Arterial line, CVP, Cardiac output, BIS, Urine output, **ICP monitoring**, **Continuous EEG** |
 | 8 | Baseline Vitals | HR★, SBP★, DBP★, SpO₂★, RR, Temp, EtCO₂ |
 | 9 | Trend Settings | Window size★ (short / medium / long) |
@@ -69,13 +69,14 @@ A mandatory **disclaimer** is displayed before any patient data entry.
 | **4 Trend Graphs** | Hemodynamic (HR, MAP, SBP), Respiratory (SpO₂, EtCO₂, RR), Temperature, Fluid Balance & Shock Index — all time-stamped |
 | **Fluid Balance Tracking** | Estimated blood loss★, IV fluids★, blood transfusion, urine output — with auto-calculated total loss, total input, and net balance |
 | **Drug Administration Log** | 12 drug categories (vasopressors, inotropes, sedatives, muscle relaxants, analgesics, antibiotics, IV fluids/colloids, blood products, local anesthetics, antiemetics, reversal agents, other) with name, dose, route, and timestamp |
-| **Clinical Events Timeline** | Quick-log buttons organized across multiple categories: **Airway / Anesthesia / Sedation** (Induction, Intubation, Spinal, Epidural, Regional Block, Vent Change, Extubation, Sedation Start, Weaning Trial), **Surgical / Procedural Events** (Incision, Tourniquet On/Off, Insufflation, Major Manipulation, Clamping, Reperfusion, Procedure Start, Procedure End), **ICU / ED / PACU Events** (Admission, Transfer, Discharge, Position Change, Line Inserted, Line Removed, Handover, Code Blue), **Critical Events** (Bleeding, Hypotension, Desaturation, Arrhythmia, Airway Difficulty, Cardiac Arrest, Seizure, Respiratory Failure), **Infection / Sepsis** (Temp Rise, Infection Suspected, Sepsis Event, Antibiotics Given) — plus custom text input |
+| **Clinical Events Timeline** | Quick-log buttons organized across multiple categories: **Airway / Anesthesia / Sedation** (Induction, Intubation, Spinal, Epidural, Regional Block, Vent Change, Extubation, Sedation Start, Weaning Trial), **Surgical / Procedural Events** (Incision, Tourniquet On/Off, Insufflation, Major Manipulation, Clamping, Reperfusion, Procedure Start, Procedure End), **ICU / ED / PACU Events** (Admission, Transfer, Discharge, Position Change, Line Inserted, Line Removed, Handover, Code Blue), **Critical Events** (Bleeding, Hypotension, Desaturation, Arrhythmia, Airway Difficulty, Cardiac Arrest, Seizure, Respiratory Failure), **Infection / Sepsis** (Temp Rise, Infection Suspected, Sepsis Event, Antibiotics Given, Cultures Sent) — plus custom text input |
 | **Alarm & Safety System** | 9 configurable threshold alarms (MAP < 65, SpO₂ < 92%, EtCO₂ < 25 / > 50, HR < 45 / > 130, Shock Index > 0.9, Temp > 38.5°C / < 35°C) with real-time alarm badges and safety bar |
 | **4-Tier Alert Engine** | NONE → WATCH → CONCERN → CRITICAL with audio tones, vibration, voice alerts, and full-screen red overlay |
 | **Clinical Insight Cards** | Structured 7-section cards: vitals, waveforms, trend interpretation, differentials, checks, actions, alarms |
 | **Clinical Risk Prediction** | AI-estimated risk scores for hypotension, ICU admission, sepsis, and acute kidney injury — based on patient baseline, clinical trends, fluid balance, and events across the monitoring session |
 | **Copilot Chat** | Streaming AI chat fused with full patient context, vitals, baseline, fluid balance, drug log, clinical events, and active alarms |
-| **Voice I/O** | Web Speech API for voice input + browser TTS for critical voice alerts |
+| **PDF Export** | One-click clinical monitoring report export — patient demographics, vitals history table, fluid balance, drug log, events timeline, alarms, and clinical insight — generated client-side via jsPDF |
+| **Voice I/O** | Gemini Live API native audio (WebSocket) for real-time bidirectional voice conversation with Jarvis; Gemini Live TTS for spoken responses; browser TTS fallback for critical voice alerts |
 | **Simulation Mode** | Hidden MP4 fallback for demo reliability (triple-click logo or Ctrl+Shift+S) |
 | **PWA Support** | Installable on any device via manifest, works on phones and tablets |
 
@@ -139,8 +140,15 @@ Camera / MP4 / Manual Entry
   │  ├──────────┤│  Alarm System
   │  │Clinical  ││
   │  │Risk Pred ││  Clinical Risk Prediction
+  │  ├──────────┤│
+  │  │PDF Export││  Clinical Monitoring Report
   │  └──────────┘│
   └──────────────┘
+       │                    ┌───────────────────────┐
+       │  WebSocket         │  Gemini Live API       │
+       └───────────────────▶│  Native Audio I/O      │
+                            │  (Bidirectional voice) │
+                            └───────────────────────┘
 ```
 
 ### What Jarvis Combines for Clinical Reasoning
@@ -153,7 +161,8 @@ Patient baseline (Page 1) + Clinical setting
   + Drug administration log
   + Fluid balance (EBL, IVF, blood, urine)
   + Active alarm states
-  = Clinical reasoning + Clinical risk prediction
+  + Voice conversation (Gemini Live)
+  = Clinical reasoning + Clinical risk prediction + PDF report
 ```
 
 ### Tech Stack
@@ -165,7 +174,9 @@ Patient baseline (Page 1) + Clinical setting
 | Frontend | Vanilla HTML / CSS / JS (no build step) |
 | Camera | `MediaDevices.getUserMedia()` with ROI crop |
 | Charts | Chart.js 4.x (CDN) — 4 separate trend graphs |
-| Alerts | Web Audio API + Vibration API + Web Speech API |
+| PDF Export | jsPDF (CDN) — client-side clinical report generation |
+| Voice I/O | Gemini Live API (native audio WebSocket) + browser TTS fallback |
+| Alerts | Web Audio API + Vibration API + Gemini Live TTS |
 | Deployment | Docker → Google Cloud Run |
 
 ---
@@ -245,9 +256,10 @@ JarvisOR/
 │   │                         #   fluid summary cards, drug log, clinical risk bars,
 │   │                         #   collapsible panels, responsive)
 │   ├── app.js                # Client logic (CameraManager, ROIManager, AlertEngine,
-│   │                         #   VitalsTrendBuffer, MultiChartManager, ManualEntry,
-│   │                         #   FluidBalance, DrugLog, AlarmSystem, ClinicalRisk,
-│   │                         #   SimulationMode, BMI calc, derived vitals)
+│   │                         #   VitalsTrendBuffer, MultiChartManager, GeminiLiveSession,
+│   │                         #   ManualEntry, FluidBalance, DrugLog, AlarmSystem,
+│   │                         #   ClinicalRisk, PDF Export, SimulationMode,
+│   │                         #   BMI calc, derived vitals)
 │   └── manifest.json         # PWA manifest
 ├── requirements.txt           # Python dependencies
 ├── Dockerfile                 # Production container image (Cloud Run compatible)
@@ -274,10 +286,12 @@ The recommended sequence for a live demo:
 12. Watch Jarvis escalate: **NONE → WATCH → CONCERN → CRITICAL**
 13. At CRITICAL: full-screen red overlay, voice alert, safety alarm badges, clinical insight card with differentials
 14. Click **Calculate Risk** in the Clinical Risk panel → see predicted risks
-15. Clinician says (voice): *"250ml fluid bolus given"* → Jarvis logs event, watches for recovery
-16. Vitals recover → trend reversal detected → alert downgrades
+15. Click 🎤 to start a **Gemini Live voice session** — speak naturally to Jarvis in real-time
+16. Clinician says (voice): *"250ml fluid bolus given"* → Jarvis responds with native audio
+17. Vitals recover → trend reversal detected → alert downgrades
+18. Click **📄 Export PDF** → download a complete clinical monitoring report
 
-**If the live camera fails:** Triple-click the brain logo (or Ctrl+Shift+S) to activate **Simulation Mode** with a pre-recorded MP4.
+**If the live camera fails:** Triple-click the heart logo (or Ctrl+Shift+S) to activate **Simulation Mode** with a pre-recorded MP4.
 
 ---
 

@@ -389,6 +389,253 @@ class AlertEngine {
     }
 }
 
+// ─── Gemini Live Voice Session ───────────────────────────
+
+class GeminiLiveSession {
+    constructor() {
+        this.ws = null;
+        this.captureCtx = null;
+        this.playbackCtx = null;
+        this.mediaStream = null;
+        this.processor = null;
+        this.isActive = false;
+        this.nextPlayTime = 0;
+        this.pendingSources = [];
+
+        this.onInputTranscription = null;
+        this.onOutputTranscription = null;
+        this.onStateChange = null;
+        this.onError = null;
+        this.onTurnComplete = null;
+    }
+
+    async start(apiKey, systemInstruction, voiceName = 'Aoede') {
+        if (this.isActive) return;
+
+        const MODEL = 'gemini-2.5-flash-native-audio-preview-12-2025';
+        const WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+
+        this.isActive = true;
+        this.onStateChange?.('connecting');
+        this._inputTranscript = '';
+        this._outputTranscript = '';
+
+        return new Promise((resolve, reject) => {
+            this.ws = new WebSocket(WS_URL);
+
+            this.ws.onopen = () => {
+                const config = {
+                    setup: {
+                        model: `models/${MODEL}`,
+                        generationConfig: {
+                            responseModalities: ['AUDIO'],
+                            speechConfig: {
+                                voiceConfig: {
+                                    prebuiltVoiceConfig: { voiceName }
+                                }
+                            }
+                        },
+                        systemInstruction: {
+                            parts: [{ text: systemInstruction }]
+                        },
+                        inputAudioTranscription: {},
+                        outputAudioTranscription: {}
+                    }
+                };
+                this.ws.send(JSON.stringify(config));
+            };
+
+            this.ws.onmessage = async (event) => {
+                let raw = event.data;
+                if (raw instanceof Blob) {
+                    raw = await raw.text();
+                }
+                let msg;
+                try {
+                    msg = JSON.parse(raw);
+                } catch (_) {
+                    return;
+                }
+                if (msg.setupComplete) {
+                    this.onStateChange?.('active');
+                    resolve();
+                    return;
+                }
+                this._handleMessage(msg);
+            };
+
+            this.ws.onerror = (err) => {
+                this.onError?.(err);
+                this.stop();
+                reject(new Error('WebSocket connection failed'));
+            };
+
+            this.ws.onclose = () => {
+                if (this.isActive) {
+                    this.isActive = false;
+                    this.onStateChange?.('closed');
+                }
+            };
+        });
+    }
+
+    async startAudioCapture() {
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({
+            audio: { channelCount: 1, sampleRate: { ideal: 16000 } }
+        });
+
+        this.captureCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        const source = this.captureCtx.createMediaStreamSource(this.mediaStream);
+
+        const workletCode = `
+class PCMProcessor extends AudioWorkletProcessor {
+    process(inputs) {
+        const ch = inputs[0]?.[0];
+        if (ch?.length) this.port.postMessage(ch);
+        return true;
+    }
+}
+registerProcessor('pcm-processor', PCMProcessor);`;
+        const blob = new Blob([workletCode], { type: 'application/javascript' });
+        const url = URL.createObjectURL(blob);
+        await this.captureCtx.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+
+        this.processor = new AudioWorkletNode(this.captureCtx, 'pcm-processor');
+        this.processor.port.onmessage = (e) => {
+            if (!this.isActive || this.ws?.readyState !== WebSocket.OPEN) return;
+            const int16 = this._float32ToInt16(e.data);
+            const b64 = this._bufferToBase64(int16.buffer);
+            this.ws.send(JSON.stringify({
+                realtimeInput: {
+                    mediaChunks: [{
+                        data: b64,
+                        mimeType: 'audio/pcm;rate=16000'
+                    }]
+                }
+            }));
+        };
+
+        source.connect(this.processor);
+        this.processor.connect(this.captureCtx.destination);
+    }
+
+    sendText(text) {
+        if (!this.isActive || this.ws?.readyState !== WebSocket.OPEN) return;
+        this.ws.send(JSON.stringify({
+            clientContent: {
+                turns: [{ role: 'user', parts: [{ text }] }],
+                turnComplete: true
+            }
+        }));
+    }
+
+    _handleMessage(msg) {
+        if (msg.serverContent) {
+            const sc = msg.serverContent;
+
+            if (sc.modelTurn?.parts) {
+                for (const part of sc.modelTurn.parts) {
+                    if (part.inlineData) {
+                        this._playAudioChunk(part.inlineData.data);
+                    }
+                }
+            }
+
+            if (sc.inputTranscription?.text) {
+                this._inputTranscript += sc.inputTranscription.text;
+                this.onInputTranscription?.(this._inputTranscript, false);
+            }
+
+            if (sc.outputTranscription?.text) {
+                this._outputTranscript += sc.outputTranscription.text;
+                this.onOutputTranscription?.(this._outputTranscript, false);
+            }
+
+            if (sc.turnComplete) {
+                if (this._inputTranscript) {
+                    this.onInputTranscription?.(this._inputTranscript, true);
+                    this._inputTranscript = '';
+                }
+                if (this._outputTranscript) {
+                    this.onOutputTranscription?.(this._outputTranscript, true);
+                    this._outputTranscript = '';
+                }
+                this.onTurnComplete?.();
+            }
+        }
+    }
+
+    _playAudioChunk(b64Data) {
+        if (!this.playbackCtx) {
+            this.playbackCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+            this.nextPlayTime = 0;
+        }
+
+        const raw = atob(b64Data);
+        const bytes = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+
+        const int16 = new Int16Array(bytes.buffer);
+        const float32 = new Float32Array(int16.length);
+        for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+
+        const buf = this.playbackCtx.createBuffer(1, float32.length, 24000);
+        buf.getChannelData(0).set(float32);
+
+        const src = this.playbackCtx.createBufferSource();
+        src.buffer = buf;
+        src.connect(this.playbackCtx.destination);
+
+        const now = this.playbackCtx.currentTime;
+        const t = Math.max(now + 0.01, this.nextPlayTime);
+        src.start(t);
+        this.nextPlayTime = t + buf.duration;
+        this.pendingSources.push(src);
+        src.onended = () => {
+            const idx = this.pendingSources.indexOf(src);
+            if (idx >= 0) this.pendingSources.splice(idx, 1);
+        };
+    }
+
+    stopPlayback() {
+        this.pendingSources.forEach(s => { try { s.stop(); } catch (_) {} });
+        this.pendingSources = [];
+        this.nextPlayTime = 0;
+    }
+
+    stop() {
+        this.isActive = false;
+        if (this.processor) { this.processor.port.onmessage = null; this.processor.disconnect(); this.processor = null; }
+        if (this.captureCtx) { this.captureCtx.close().catch(() => {}); this.captureCtx = null; }
+        if (this.mediaStream) { this.mediaStream.getTracks().forEach(t => t.stop()); this.mediaStream = null; }
+        if (this.ws && this.ws.readyState <= WebSocket.OPEN) { this.ws.close(); }
+        this.ws = null;
+        this.stopPlayback();
+        if (this.playbackCtx) { this.playbackCtx.close().catch(() => {}); this.playbackCtx = null; }
+        this.onStateChange?.('closed');
+    }
+
+    _float32ToInt16(f32) {
+        const i16 = new Int16Array(f32.length);
+        for (let i = 0; i < f32.length; i++) {
+            const s = Math.max(-1, Math.min(1, f32[i]));
+            i16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        return i16;
+    }
+
+    _bufferToBase64(buf) {
+        const bytes = new Uint8Array(buf);
+        let bin = '';
+        const chunkSize = 8192;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+        }
+        return btoa(bin);
+    }
+}
+
 // ─── Multi-Chart Manager ─────────────────────────────────
 
 function createChart(canvasEl, datasets, opts = {}) {
@@ -562,6 +809,10 @@ class JarvisApp {
         this.api = new APIClient();
         this.simClickCount = 0;
         this.simClickTimer = null;
+        this.liveSession = null;
+        this._liveInputBubble = null;
+        this._liveOutputBubble = null;
+        this._ttsSession = null;
     }
 
     init() {
@@ -600,6 +851,7 @@ class JarvisApp {
         this.bindSectionToggles();
         this.bindBMICalc();
         this.bindComorbidToggle();
+        this.bindMedControlledToggle();
         this.bindAnesthesiaOtherToggle();
 
         $('#start-monitoring').addEventListener('click', () => {
@@ -725,6 +977,15 @@ class JarvisApp {
                 $('#comorbid-other-field').classList.toggle('hidden', !otherCb.checked);
             });
         }
+    }
+
+    bindMedControlledToggle() {
+        document.querySelectorAll('input[name="med-controlled"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                const show = document.querySelector('input[name="med-controlled"]:checked')?.value === 'yes';
+                $('#med-details').classList.toggle('hidden', !show);
+            });
+        });
     }
 
     collectComorbidities() {
@@ -1582,16 +1843,16 @@ class JarvisApp {
             if (e.key === 'Enter') sendMessage();
         });
 
-        voiceBtn.addEventListener('click', () => this.startVoiceInput());
+        voiceBtn.addEventListener('click', () => this.toggleVoiceSession());
 
         voiceOutputBtn.addEventListener('click', () => {
             state.voiceOutputEnabled = !state.voiceOutputEnabled;
             voiceOutputBtn.textContent = state.voiceOutputEnabled ? '🔊' : '🔇';
             voiceOutputBtn.classList.toggle('btn-voice-active', state.voiceOutputEnabled);
             if (state.voiceOutputEnabled) {
-                this.alerts.speak('Voice output enabled.');
+                this.speakWithGemini('Voice output enabled.');
             } else {
-                window.speechSynthesis?.cancel();
+                if (this._ttsSession) { this._ttsSession.stop(); this._ttsSession = null; }
             }
         });
     }
@@ -1633,7 +1894,7 @@ class JarvisApp {
             this.detectSurgicalEvent(message);
 
             if (state.voiceOutputEnabled && fullText) {
-                this.alerts.speak(fullText);
+                this.speakWithGemini(fullText);
             }
         } catch (err) {
             bubbleEl.textContent = `Error: ${err.message}`;
@@ -1728,72 +1989,129 @@ class JarvisApp {
         }
     }
 
-    // ── Voice ──
+    // ── Voice (Gemini Live API) ──
 
-    startVoiceInput() {
-        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-            this.appendChat('assistant', 'Speech recognition is not supported in this browser. Please use Google Chrome on desktop for voice input.');
+    async toggleVoiceSession() {
+        if (this.liveSession?.isActive) {
+            this._endVoiceSession();
             return;
         }
 
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-        recognition.maxAlternatives = 1;
+        if (!state.apiKey) {
+            this.appendChat('assistant', 'Please enter your Gemini API key and start monitoring before using voice.');
+            return;
+        }
 
         const voiceBtn = $('#voice-btn');
         const chatInput = $('#chat-input');
         voiceBtn.classList.add('btn-recording');
         voiceBtn.textContent = '🔴';
-        chatInput.placeholder = 'Listening…';
+        chatInput.placeholder = 'Live voice session active — speak to Jarvis…';
 
-        recognition.onresult = (event) => {
-            let interimTranscript = '';
-            let finalTranscript = '';
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const t = event.results[i][0].transcript;
-                if (event.results[i].isFinal) finalTranscript += t;
-                else interimTranscript += t;
-            }
-            chatInput.value = finalTranscript || interimTranscript;
+        const session = new GeminiLiveSession();
+        this.liveSession = session;
+        this._liveInputBubble = null;
+        this._liveOutputBubble = null;
 
-            if (finalTranscript) {
-                voiceBtn.classList.remove('btn-recording');
-                voiceBtn.textContent = '🎤';
-                chatInput.placeholder = 'Ask Jarvis anything…';
-                this.sendChat(finalTranscript);
+        const systemPrompt = `You are Jarvis, an AI clinical copilot for real-time patient monitoring.
+You provide concise, evidence-based clinical guidance to clinicians.
+You are currently in a live voice conversation with a clinician during a procedure.
+Be direct, clinical, and actionable. Keep responses brief for voice — aim for 2-3 sentences unless the clinician asks for detail.
+If the clinician reports a clinical event, acknowledge it and adjust your interpretation.
+
+CURRENT CLINICAL CONTEXT:
+${this.buildContext()}`;
+
+        session.onStateChange = (s) => {
+            if (s === 'closed' && this.liveSession === session) {
+                this._endVoiceSession();
             }
         };
 
-        recognition.onerror = (event) => {
-            voiceBtn.classList.remove('btn-recording');
-            voiceBtn.textContent = '🎤';
-            chatInput.placeholder = 'Ask Jarvis anything…';
-            const errorMessages = {
-                'no-speech': 'No speech detected. Please try again.',
-                'audio-capture': 'Microphone not found. Please check your microphone.',
-                'not-allowed': 'Microphone permission denied. Please allow microphone access in browser settings.',
-                'network': 'Network error during speech recognition. Please check your internet connection.',
-            };
-            const msg = errorMessages[event.error] || `Voice input error: ${event.error}`;
-            this.appendChat('assistant', msg);
+        session.onInputTranscription = (text, isFinal) => {
+            if (!this._liveInputBubble) {
+                this._liveInputBubble = this.appendChat('user', text);
+            } else {
+                this._liveInputBubble.textContent = text;
+            }
+            if (isFinal && text.trim()) {
+                state.chatHistory.push({ role: 'user', content: text });
+                this.detectSurgicalEvent(text);
+                this._liveInputBubble = null;
+            }
         };
 
-        recognition.onend = () => {
-            voiceBtn.classList.remove('btn-recording');
-            voiceBtn.textContent = '🎤';
-            chatInput.placeholder = 'Ask Jarvis anything…';
+        session.onOutputTranscription = (text, isFinal) => {
+            if (!this._liveOutputBubble) {
+                this._liveOutputBubble = this.appendChat('assistant', text);
+            } else {
+                this._liveOutputBubble.textContent = text;
+            }
+            if (isFinal && text.trim()) {
+                state.chatHistory.push({ role: 'assistant', content: text });
+                this._liveOutputBubble = null;
+            }
+        };
+
+        session.onError = () => {
+            this.appendChat('assistant', 'Voice session error. Please check your API key and try again.');
         };
 
         try {
-            recognition.start();
+            await session.start(state.apiKey, systemPrompt);
+            await session.startAudioCapture();
+            this.appendChat('assistant', 'Live voice session started — speak naturally. Click 🔴 to end.');
         } catch (err) {
-            voiceBtn.classList.remove('btn-recording');
-            voiceBtn.textContent = '🎤';
-            chatInput.placeholder = 'Ask Jarvis anything…';
-            this.appendChat('assistant', 'Could not start voice input. Please ensure microphone access is allowed.');
+            this.appendChat('assistant', `Could not start voice session: ${err.message}`);
+            this._endVoiceSession();
+        }
+    }
+
+    _endVoiceSession() {
+        const voiceBtn = $('#voice-btn');
+        const chatInput = $('#chat-input');
+        voiceBtn.classList.remove('btn-recording');
+        voiceBtn.textContent = '🎤';
+        chatInput.placeholder = 'Ask Jarvis anything…';
+
+        if (this.liveSession) {
+            const session = this.liveSession;
+            this.liveSession = null;
+            session.stop();
+        }
+        this._liveInputBubble = null;
+        this._liveOutputBubble = null;
+    }
+
+    async speakWithGemini(text) {
+        if (!state.apiKey || !text) return;
+
+        if (this._ttsSession?.isActive) {
+            this._ttsSession.sendText(text);
+            return;
+        }
+
+        const session = new GeminiLiveSession();
+        this._ttsSession = session;
+
+        session.onStateChange = (s) => {
+            if (s === 'closed') this._ttsSession = null;
+        };
+        session.onTurnComplete = () => {
+            setTimeout(() => {
+                if (this._ttsSession === session) {
+                    session.stop();
+                    this._ttsSession = null;
+                }
+            }, 500);
+        };
+
+        try {
+            await session.start(state.apiKey, 'Read the following text aloud naturally. Do not add any commentary.');
+            session.sendText(text);
+        } catch (_) {
+            this._ttsSession = null;
+            this.alerts.speak(text);
         }
     }
 
@@ -1933,16 +2251,48 @@ class JarvisApp {
     }
 
     exportToPDF() {
-        if (!window.jspdf || !window.jspdf.jsPDF) {
-            alert('PDF library not loaded. Please check your internet connection and reload the page.');
+        if (window.jspdf && window.jspdf.jsPDF) {
+            try {
+                this._generatePDF();
+            } catch (err) {
+                console.error('PDF export failed:', err);
+                alert('PDF export failed: ' + err.message);
+            }
             return;
         }
-        try {
-            this._generatePDF();
-        } catch (err) {
-            console.error('PDF export failed:', err);
-            alert('PDF export failed: ' + err.message);
-        }
+        const btn = $('#export-pdf-btn');
+        const origText = btn.textContent;
+        btn.textContent = '⏳ Loading PDF library…';
+        btn.disabled = true;
+        this._loadJsPDFDynamic()
+            .then(() => {
+                btn.textContent = origText;
+                btn.disabled = false;
+                this._generatePDF();
+            })
+            .catch(() => {
+                btn.textContent = origText;
+                btn.disabled = false;
+                alert('Could not load PDF library. Please check your internet connection and try again.');
+            });
+    }
+
+    _loadJsPDFDynamic() {
+        const urls = [
+            'https://cdn.jsdelivr.net/npm/jspdf@4.2.0/dist/jspdf.umd.min.js',
+            'https://unpkg.com/jspdf@4.2.0/dist/jspdf.umd.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/jspdf/3.0.3/jspdf.umd.min.js',
+        ];
+        return urls.reduce(
+            (chain, url) => chain.catch(() => new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = url;
+                s.onload = () => (window.jspdf && window.jspdf.jsPDF) ? resolve() : reject();
+                s.onerror = reject;
+                document.head.appendChild(s);
+            })),
+            Promise.reject()
+        );
     }
 
     _generatePDF() {

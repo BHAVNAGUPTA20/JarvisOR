@@ -7,11 +7,14 @@
     <link rel="stylesheet" href="/static/style.css">
     <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#0a0e17">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🫀</text></svg>">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description" content="Multimodal AI Clinical Monitoring & Decision Support">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.0/dist/jspdf.umd.min.js" crossorigin="anonymous"
+            onerror="var s=document.createElement('script');s.src='https://unpkg.com/jspdf@4.2.0/dist/jspdf.umd.min.js';s.crossOrigin='anonymous';document.head.appendChild(s);"></script>
 </head>
 <body>
 
@@ -285,7 +288,7 @@
                     <label class="field-label">Medication Controlled</label>
                     <div class="toggle-row">
                         <label class="toggle-label">
-                            <input type="radio" name="med-controlled" value="yes" checked>
+                            <input type="radio" name="med-controlled" value="yes">
                             <span class="radio-label">Yes</span>
                         </label>
                         <label class="toggle-label">
@@ -294,20 +297,22 @@
                         </label>
                     </div>
                 </div>
-                <div class="setup-field">
-                    <label class="field-label">Important Medications</label>
-                    <div class="checkbox-grid">
-                        <label class="checkbox-label"><input type="checkbox" name="medications" value="Antihypertensives"> Antihypertensives</label>
-                        <label class="checkbox-label"><input type="checkbox" name="medications" value="Beta blockers"> Beta blockers</label>
-                        <label class="checkbox-label"><input type="checkbox" name="medications" value="Anticoagulants / Antiplatelets"> Anticoagulants / Antiplatelets</label>
-                        <label class="checkbox-label"><input type="checkbox" name="medications" value="Insulin / Oral hypoglycemics"> Insulin / Oral hypoglycemics</label>
-                        <label class="checkbox-label"><input type="checkbox" name="medications" value="Steroids"> Steroids</label>
-                        <label class="checkbox-label"><input type="checkbox" name="medications" value="Diuretics"> Diuretics</label>
-                        <label class="checkbox-label"><input type="checkbox" name="medications" value="Other"> Other</label>
+                <div id="med-details" class="hidden">
+                    <div class="setup-field">
+                        <label class="field-label">Important Medications</label>
+                        <div class="checkbox-grid">
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Antihypertensives"> Antihypertensives</label>
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Beta blockers"> Beta blockers</label>
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Anticoagulants / Antiplatelets"> Anticoagulants / Antiplatelets</label>
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Insulin / Oral hypoglycemics"> Insulin / Oral hypoglycemics</label>
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Steroids"> Steroids</label>
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Diuretics"> Diuretics</label>
+                            <label class="checkbox-label"><input type="checkbox" name="medications" value="Other"> Other</label>
+                        </div>
                     </div>
-                </div>
-                <div class="setup-field" style="margin-top:4px">
-                    <input type="text" id="med-other-text" class="input-field" placeholder="Other medications (optional)">
+                    <div class="setup-field" style="margin-top:4px">
+                        <input type="text" id="med-other-text" class="input-field" placeholder="Other medications (optional)">
+                    </div>
                 </div>
             </div>
         </div>
@@ -1116,8 +1121,8 @@
                 </div>
             </div>
             <div class="chat-input-row">
-                <button id="voice-btn" class="btn btn-icon" title="Voice input">🎤</button>
-                <button id="voice-output-btn" class="btn btn-icon" title="Toggle voice output (read responses aloud)">🔇</button>
+                <button id="voice-btn" class="btn btn-icon" title="Start/stop Gemini Live voice session">🎤</button>
+                <button id="voice-output-btn" class="btn btn-icon" title="Toggle voice output (read responses aloud via Gemini)">🔇</button>
                 <input type="text" id="chat-input" class="input-field" placeholder="Ask Jarvis anything…">
                 <button id="chat-send" class="btn btn-primary">Send</button>
             </div>

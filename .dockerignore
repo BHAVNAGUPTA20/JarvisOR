@@ -1,0 +1,8 @@
+.git
+__pycache__
+*.pyc
+.env
+.venv
+node_modules
+.cursor
+or_guardian_live_full.py

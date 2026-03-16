@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jarvis OR Guardian</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#0a0e17">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="Multimodal AI Assistant for Anaesthesia & Critical Care">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ═══ CRITICAL ALERT OVERLAY ═══ -->
+<div id="critical-overlay" class="critical-overlay hidden">
+    <div class="critical-content">
+        <div class="critical-icon">🚨</div>
+        <h1>CRITICAL ALERT</h1>
+        <p id="critical-message"></p>
+        <div id="critical-vitals" class="critical-vitals-row"></div>
+        <button id="critical-dismiss" class="btn btn-danger">Acknowledge</button>
+    </div>
+</div>
+
+<!-- ═══ HEADER ═══ -->
+<header class="app-header">
+    <div class="header-left">
+        <span class="logo-icon">🧠</span>
+        <div class="header-titles">
+            <h1>Jarvis OR Guardian</h1>
+            <span class="header-subtitle">Multimodal AI for Anaesthesia</span>
+        </div>
+    </div>
+    <div class="header-right">
+        <div id="connection-dot" class="status-dot dot-disconnected" title="Not connected"></div>
+        <button id="settings-toggle" class="btn btn-icon" title="Settings">⚙️</button>
+    </div>
+</header>
+
+<!-- ═══ ALERT BANNER ═══ -->
+<div id="alert-banner" class="alert-banner alert-none hidden">
+    <span id="alert-icon">✅</span>
+    <span id="alert-text">ALL CLEAR</span>
+    <span id="alert-time"></span>
+</div>
+
+<!-- ═══ SETUP PANEL ═══ -->
+<section id="setup-panel" class="setup-panel">
+    <div class="setup-card">
+        <div class="setup-header">
+            <span class="setup-icon">🧠</span>
+            <h2>Jarvis OR Guardian</h2>
+            <p class="setup-subtitle">Multimodal AI Assistant for Anaesthesia &amp; Critical Care</p>
+        </div>
+
+        <div class="setup-section">
+            <label class="field-label">Gemini API Key</label>
+            <input type="password" id="api-key" class="input-field" placeholder="Enter your Gemini API key">
+            <span class="field-hint">Required for AI vision and clinical analysis</span>
+        </div>
+
+        <div class="setup-divider"></div>
+
+        <h3 class="section-title">Patient Context</h3>
+        <div class="setup-row">
+            <div class="setup-field">
+                <label class="field-label">Age</label>
+                <input type="number" id="patient-age" class="input-field" value="65" min="1" max="120">
+            </div>
+            <div class="setup-field flex-2">
+                <label class="field-label">Procedure</label>
+                <input type="text" id="patient-procedure" class="input-field" value="Spinal anesthesia for hip surgery">
+            </div>
+        </div>
+        <div class="setup-field">
+            <label class="field-label">Comorbidities</label>
+            <textarea id="patient-comorbidities" class="input-field textarea" rows="2">Hypertension, diabetes</textarea>
+        </div>
+
+        <div class="setup-divider"></div>
+
+        <h3 class="section-title">Baseline Vitals</h3>
+        <div class="baseline-grid">
+            <div class="baseline-item">
+                <label class="field-label">HR (bpm)</label>
+                <input type="number" id="base-hr" class="input-field" value="72" min="30" max="200">
+            </div>
+            <div class="baseline-item">
+                <label class="field-label">SpO₂ (%)</label>
+                <input type="number" id="base-spo2" class="input-field" value="99" min="70" max="100">
+            </div>
+            <div class="baseline-item">
+                <label class="field-label">SBP (mmHg)</label>
+                <input type="number" id="base-sbp" class="input-field" value="130" min="50" max="250">
+            </div>
+            <div class="baseline-item">
+                <label class="field-label">DBP (mmHg)</label>
+                <input type="number" id="base-dbp" class="input-field" value="80" min="20" max="150">
+            </div>
+            <div class="baseline-item">
+                <label class="field-label">EtCO₂ (mmHg)</label>
+                <input type="number" id="base-etco2" class="input-field" value="35" min="10" max="80">
+            </div>
+            <div class="baseline-item">
+                <label class="field-label">RR (/min)</label>
+                <input type="number" id="base-rr" class="input-field" value="14" min="4" max="50">
+            </div>
+        </div>
+
+        <button id="start-monitoring" class="btn btn-primary btn-large">
+            Start Monitoring →
+        </button>
+
+        <p class="disclaimer">
+            Educational clinical decision support prototype. Not FDA-cleared. Not for autonomous medical decisions.
+        </p>
+    </div>
+</section>
+
+<!-- ═══ MAIN DASHBOARD ═══ -->
+<main id="dashboard" class="dashboard hidden">
+
+    <!-- Top Row: Camera + Vitals -->
+    <div class="dash-top">
+
+        <!-- Camera Panel -->
+        <section class="panel camera-panel">
+            <div class="panel-header">
+                <h3>📹 Vision Monitor</h3>
+                <div class="camera-status">
+                    <span id="camera-status-text">Camera Off</span>
+                    <span id="camera-status-dot" class="status-dot dot-off"></span>
+                </div>
+            </div>
+            <div class="camera-viewport" id="camera-viewport">
+                <video id="camera-feed" autoplay playsinline muted></video>
+                <canvas id="capture-canvas"></canvas>
+                <div id="camera-placeholder" class="camera-placeholder">
+                    <span>📷</span>
+                    <p>Camera feed will appear here</p>
+                </div>
+                <div id="capture-flash" class="capture-flash"></div>
+                <!-- ROI Overlay -->
+                <div id="roi-overlay" class="roi-overlay hidden">
+                    <div id="roi-box" class="roi-box">
+                        <span class="roi-label">Align monitor here</span>
+                        <div class="roi-handle roi-handle-nw" data-dir="nw"></div>
+                        <div class="roi-handle roi-handle-ne" data-dir="ne"></div>
+                        <div class="roi-handle roi-handle-sw" data-dir="sw"></div>
+                        <div class="roi-handle roi-handle-se" data-dir="se"></div>
+                    </div>
+                </div>
+                <!-- SIM Mode Badge -->
+                <div id="sim-badge" class="sim-badge hidden">SIM</div>
+            </div>
+            <div class="camera-controls">
+                <button id="camera-toggle" class="btn btn-secondary">📷 Start Camera</button>
+                <button id="capture-btn" class="btn btn-primary" disabled>📸 Capture</button>
+                <button id="preflight-btn" class="btn btn-outline" disabled>🔍 Pre-flight</button>
+                <label class="toggle-label roi-toggle-label">
+                    <input type="checkbox" id="roi-toggle" checked>
+                    <span class="toggle-slider"></span>
+                    ROI
+                </label>
+            </div>
+            <div class="auto-capture-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="auto-capture-toggle">
+                    <span class="toggle-slider"></span>
+                    Auto-capture
+                </label>
+                <select id="capture-interval" class="select-field">
+                    <option value="3000" selected>3s</option>
+                    <option value="5000">5s</option>
+                    <option value="10000">10s</option>
+                    <option value="15000">15s</option>
+                    <option value="30000">30s</option>
+                </select>
+                <span id="auto-capture-status" class="auto-status"></span>
+            </div>
+            <!-- Upload fallback -->
+            <div class="upload-fallback">
+                <label class="upload-label" for="upload-image">
+                    Or upload a monitor screenshot
+                </label>
+                <input type="file" id="upload-image" accept="image/*" class="file-input">
+            </div>
+            <!-- Simulation mode (hidden) — load MP4 for demo fallback -->
+            <input type="file" id="sim-video-input" accept="video/*" class="file-input" style="display:none">
+        </section>
+
+        <!-- Vitals Panel -->
+        <section class="panel vitals-panel">
+            <div class="panel-header">
+                <h3>📊 Vitals</h3>
+                <span id="vitals-timestamp" class="timestamp"></span>
+            </div>
+            <div class="vitals-grid">
+                <div class="vital-card vital-hr" id="v-hr">
+                    <div class="vital-label">HR</div>
+                    <div class="vital-value" id="val-hr">--</div>
+                    <div class="vital-unit">bpm</div>
+                </div>
+                <div class="vital-card vital-spo2" id="v-spo2">
+                    <div class="vital-label">SpO₂</div>
+                    <div class="vital-value" id="val-spo2">--</div>
+                    <div class="vital-unit">%</div>
+                </div>
+                <div class="vital-card vital-bp" id="v-bp">
+                    <div class="vital-label">NIBP</div>
+                    <div class="vital-value" id="val-bp">--/--</div>
+                    <div class="vital-unit">mmHg</div>
+                </div>
+                <div class="vital-card vital-map" id="v-map">
+                    <div class="vital-label">MAP</div>
+                    <div class="vital-value" id="val-map">--</div>
+                    <div class="vital-unit">mmHg</div>
+                </div>
+                <div class="vital-card vital-etco2" id="v-etco2">
+                    <div class="vital-label">EtCO₂</div>
+                    <div class="vital-value" id="val-etco2">--</div>
+                    <div class="vital-unit">mmHg</div>
+                </div>
+                <div class="vital-card vital-rr" id="v-rr">
+                    <div class="vital-label">RR</div>
+                    <div class="vital-value" id="val-rr">--</div>
+                    <div class="vital-unit">/min</div>
+                </div>
+                <div class="vital-card vital-temp" id="v-temp">
+                    <div class="vital-label">Temp</div>
+                    <div class="vital-value" id="val-temp">--</div>
+                    <div class="vital-unit">°C</div>
+                </div>
+            </div>
+
+            <!-- Waveform Assessment -->
+            <div id="waveform-section" class="waveform-section hidden">
+                <h4>📈 Waveforms</h4>
+                <div id="waveform-items"></div>
+            </div>
+
+            <!-- Trajectory Badge -->
+            <div class="trajectory-row">
+                <div class="trajectory-badge" id="trajectory-badge">
+                    <span id="trajectory-icon">⚪</span>
+                    <span id="trajectory-text">Awaiting data</span>
+                </div>
+                <div class="reading-count">
+                    <span id="reading-count">0</span> readings
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Clinical Insight Card -->
+    <section id="clinical-card" class="panel clinical-card hidden">
+        <div class="panel-header">
+            <h3 id="card-alert-label">📋 Clinical Insight</h3>
+            <span id="card-timestamp" class="timestamp"></span>
+        </div>
+
+        <div id="card-trend" class="card-section hidden">
+            <h4>📉 Trend Interpretation</h4>
+            <p id="card-trend-text"></p>
+        </div>
+
+        <div id="card-physio" class="card-section hidden">
+            <h4>🧬 Physiological Explanation</h4>
+            <p id="card-physio-text"></p>
+        </div>
+
+        <div id="card-differentials" class="card-section hidden">
+            <h4>🔍 Differential Diagnosis</h4>
+            <ol id="card-diff-list"></ol>
+        </div>
+
+        <div id="card-checks" class="card-section hidden">
+            <h4>✅ Immediate Checks</h4>
+            <div id="card-checks-list"></div>
+        </div>
+
+        <div id="card-actions" class="card-section hidden">
+            <h4>💡 Suggested Actions</h4>
+            <div id="card-actions-list"></div>
+        </div>
+
+        <div id="card-alarms" class="card-section hidden">
+            <h4>🔔 Alarms Visible</h4>
+            <div id="card-alarms-list"></div>
+        </div>
+
+        <div id="card-quality" class="card-quality hidden">
+            <span>📷</span> <span id="card-quality-text"></span>
+        </div>
+    </section>
+
+    <!-- Trend Chart -->
+    <section class="panel trend-panel">
+        <div class="panel-header">
+            <h3>📊 Vital Trends</h3>
+            <div class="trend-controls">
+                <button id="clear-trends" class="btn btn-small btn-outline">Clear</button>
+            </div>
+        </div>
+        <div class="chart-container">
+            <canvas id="trend-chart"></canvas>
+        </div>
+        <div id="trend-deltas" class="trend-deltas hidden"></div>
+    </section>
+
+    <!-- Bottom: Chat + Events -->
+    <div class="dash-bottom">
+
+        <!-- Chat Panel -->
+        <section class="panel chat-panel">
+            <div class="panel-header">
+                <h3>💬 Copilot Chat</h3>
+            </div>
+            <div id="chat-messages" class="chat-messages">
+                <div class="chat-msg assistant">
+                    <div class="chat-bubble">Jarvis online. I'm monitoring vitals and ready to assist. Ask me anything about the case.</div>
+                </div>
+            </div>
+            <div class="chat-input-row">
+                <button id="voice-btn" class="btn btn-icon" title="Voice input">🎤</button>
+                <input type="text" id="chat-input" class="input-field" placeholder="Ask Jarvis anything…">
+                <button id="chat-send" class="btn btn-primary">Send</button>
+            </div>
+        </section>
+
+        <!-- Surgical Events -->
+        <section class="panel events-panel">
+            <div class="panel-header">
+                <h3>📋 Surgical Events</h3>
+            </div>
+            <div id="events-list" class="events-list">
+                <p class="events-empty">No events logged yet</p>
+            </div>
+            <div class="event-input-row">
+                <input type="text" id="event-input" class="input-field" placeholder="e.g. Incision started, 250ml bolus given…">
+                <button id="event-log" class="btn btn-secondary">Log</button>
+            </div>
+        </section>
+    </div>
+
+    <!-- Preflight Result Modal -->
+    <div id="preflight-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>📷 Pre-flight Camera Check</h3>
+            <div id="preflight-result"></div>
+            <button id="preflight-close" class="btn btn-primary">Close</button>
+        </div>
+    </div>
+
+</main>
+
+<!-- ═══ FOOTER ═══ -->
+<footer class="app-footer">
+    <div class="footer-left">
+        <strong>Dr Bhavna Gupta</strong> · Anaesthesiologist
+    </div>
+    <div class="footer-right">
+        Prototype for research &amp; education · Not FDA-cleared
+    </div>
+</footer>
+
+<!-- ═══ SETTINGS DRAWER ═══ -->
+<div id="settings-drawer" class="settings-drawer hidden">
+    <div class="settings-content">
+        <div class="settings-header">
+            <h3>⚙️ Settings</h3>
+            <button id="settings-close" class="btn btn-icon">✕</button>
+        </div>
+        <div class="settings-body">
+            <div class="setup-field">
+                <label class="field-label">Gemini API Key</label>
+                <input type="password" id="settings-api-key" class="input-field" placeholder="Update API key">
+            </div>
+            <div class="setup-field">
+                <label class="field-label">Trend Window Size</label>
+                <input type="number" id="settings-window" class="input-field" value="10" min="3" max="30">
+            </div>
+            <h4>Patient Context</h4>
+            <div class="setup-field">
+                <label class="field-label">Age</label>
+                <input type="number" id="settings-age" class="input-field" min="1" max="120">
+            </div>
+            <div class="setup-field">
+                <label class="field-label">Procedure</label>
+                <input type="text" id="settings-procedure" class="input-field">
+            </div>
+            <div class="setup-field">
+                <label class="field-label">Comorbidities</label>
+                <textarea id="settings-comorbidities" class="input-field textarea" rows="2"></textarea>
+            </div>
+            <button id="settings-save" class="btn btn-primary">Save Settings</button>
+            <button id="back-to-setup" class="btn btn-outline" style="margin-top:8px">Back to Setup</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

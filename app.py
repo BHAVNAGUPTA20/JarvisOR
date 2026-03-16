@@ -1,271 +1,254 @@
-import streamlit as st
-from google import genai
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-from PIL import Image
-import time
-
-st.set_page_config(layout="wide", page_title="OR Guardian Live")
-
-st.title("🧠 OR Guardian Live Agent")
-st.subheader("AI Copilot for Anaesthesia & Critical Care")
-
-st.info(
-"This AI system provides educational decision support. "
-"It does not replace professional medical judgment."
-)
-
-# ------------------------------------------------
-# GEMINI API
-# ------------------------------------------------
-
-api_key = st.sidebar.text_input("Gemini API Key", type="password")
-
-if not api_key:
-    st.sidebar.warning("Enter Gemini API key")
-    st.stop()
-
-client = genai.Client(api_key=api_key)
-
-# ------------------------------------------------
-# SIDEBAR PATIENT INFO
-# ------------------------------------------------
-
-st.sidebar.header("Patient Context")
-
-patient_age = st.sidebar.number_input("Age", 1, 100, 65)
-
-procedure = st.sidebar.text_input(
-"Procedure",
-"Spinal anesthesia for hip surgery"
-)
-
-comorbidities = st.sidebar.text_area(
-"Comorbidities",
-"Hypertension, diabetes"
-)
-
-# ------------------------------------------------
-# LIVE VITAL MONITOR
-# ------------------------------------------------
-
-st.markdown("## Live Patient Monitor")
-
-if "hr" not in st.session_state:
-    st.session_state.hr = 78
-    st.session_state.bp = 120
-    st.session_state.spo2 = 98
-
-col1, col2, col3 = st.columns(3)
-
-col1.metric("Heart Rate", f"{st.session_state.hr} bpm")
-col2.metric("BP", f"{st.session_state.bp}/70")
-col3.metric("SpO2", f"{st.session_state.spo2}%")
-
-if st.button("Simulate Vital Change"):
-
-    st.session_state.hr += np.random.randint(-15,15)
-    st.session_state.bp += np.random.randint(-20,20)
-    st.session_state.spo2 += np.random.randint(-3,1)
-
-    st.rerun()
-
-# ------------------------------------------------
-# VITAL TREND GRAPH
-# ------------------------------------------------
-
-st.markdown("### Vital Trend")
-
-if "trend" not in st.session_state:
-    st.session_state.trend = []
-
-st.session_state.trend.append(st.session_state.hr)
-
-trend_df = pd.DataFrame({"HR": st.session_state.trend})
-
-fig = go.Figure()
-fig.add_trace(go.Scatter(y=trend_df["HR"], mode="lines"))
-fig.update_layout(height=250)
-
-st.plotly_chart(fig, use_container_width=True)
-
-# ------------------------------------------------
-# CLINICAL CASE DESCRIPTION
-# ------------------------------------------------
-
-st.markdown("## Clinical Situation")
-
-case_description = st.text_area(
-"Describe intraoperative situation",
-placeholder="Example: BP dropped to 70/40 after spinal anesthesia"
-)
-
-# ------------------------------------------------
-# FILE / IMAGE UPLOAD
-# ------------------------------------------------
-
-st.markdown("## Upload Clinical File")
-
-uploaded_file = st.file_uploader(
-"Upload ECG / report / monitor screenshot",
-type=["png","jpg","jpeg","txt","pdf"]
-)
-
-file_text = ""
-
-if uploaded_file:
-
-    if uploaded_file.type.startswith("image"):
-
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded image", use_container_width=True)
-
-    elif uploaded_file.type == "text/plain":
-
-        file_text = uploaded_file.read().decode()
-
-        st.success("Text file uploaded")
-
-    else:
-        st.success("File uploaded")
-
-# ------------------------------------------------
-# AI ANALYSIS
-# ------------------------------------------------
-
-st.markdown("## AI Clinical Analysis")
-
-if st.button("Run AI Analysis"):
-
-    prompt = f"""
-You are an expert anaesthesia decision-support AI.
-
-Patient details:
-Age: {patient_age}
-Procedure: {procedure}
-Comorbidities: {comorbidities}
-
-Vitals:
-Heart Rate: {st.session_state.hr}
-BP: {st.session_state.bp}/70
-SpO2: {st.session_state.spo2}
-
-Clinical Situation:
-{case_description}
-
-Uploaded Notes:
-{file_text}
-
-Provide structured output:
-
-1. Situation Assessment
-2. Possible Causes
-3. Immediate Checks
-4. Recommended Actions
-5. Critical Warning Signs
+"""
+Jarvis OR Guardian — FastAPI Backend
+Multimodal AI Assistant for Anaesthesia & Critical Care
 """
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-        stream=True
-    )
+from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional
+from google import genai
+from PIL import Image
+import json
+import base64
+import io
+import os
 
-    placeholder = st.empty()
-    text=""
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-    for chunk in response:
+app = FastAPI(title="Jarvis OR Guardian")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-        if chunk.text:
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-            text += chunk.text
-            placeholder.markdown(text)
 
-# ------------------------------------------------
-# AI COPILOT CHAT
-# ------------------------------------------------
+@app.get("/")
+async def index():
+    return FileResponse("static/index.html")
 
-st.markdown("## AI Copilot Chat")
 
-if "history" not in st.session_state:
-    st.session_state.history = []
+# ─── Request Models ──────────────────────────────────────────
 
-for msg in st.session_state.history:
+class AnalyzeRequest(BaseModel):
+    image_base64: str
+    api_key: Optional[str] = None
+    baseline: Optional[dict] = None
+    patient_context: Optional[dict] = None
+    surgical_events: Optional[list] = []
+    trend_summary: Optional[str] = None
+    preflight: bool = False
 
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
 
-query = st.chat_input("Ask the AI assistant")
+class ChatRequest(BaseModel):
+    message: str
+    api_key: Optional[str] = None
+    context: str = ""
+    stream: bool = False
 
-if query:
 
-    st.session_state.history.append({"role":"user","content":query})
+# ─── Gemini Prompts ──────────────────────────────────────────
 
-    with st.chat_message("user"):
-        st.markdown(query)
+VISION_PROMPT = """You are Jarvis, an AI clinical monitoring assistant in an operating room.
+Analyze this anesthesia workstation / patient monitor image.
 
-    with st.chat_message("assistant"):
+PATIENT BASELINE:
+{baseline}
 
-        placeholder = st.empty()
-        full=""
+CURRENT CLINICAL CONTEXT:
+{context}
 
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=query,
-            stream=True
+RECENT SURGICAL EVENTS:
+{events}
+
+VITALS TREND (last readings):
+{trend}
+
+TASK:
+1. Extract all visible vital signs (HR, SpO2, NIBP/IBP, EtCO2, RR, Temp)
+2. Assess waveform quality (ECG rhythm, SpO2 pleth, capnography shape)
+3. Identify any visible alarms or alarm states on the monitor
+4. Detect deviations from the patient baseline
+5. Consider the trend trajectory when interpreting current values
+
+RESPOND ONLY with raw JSON (no markdown fences):
+{{
+  "vitals_extracted": {{
+    "hr": null, "spo2": null, "sbp": null, "dbp": null, "map": null,
+    "etco2": null, "rr": null, "temp": null
+  }},
+  "waveforms": {{
+    "ecg_rhythm": null, "spo2_pleth": null, "capnography": null
+  }},
+  "alarms_visible": [],
+  "deviations_from_baseline": [],
+  "alert_level": "NONE",
+  "trend_interpretation": "",
+  "physiological_explanation": "",
+  "differentials": [],
+  "immediate_checks": [],
+  "suggested_actions": [],
+  "image_quality_note": ""
+}}
+
+alert_level must be one of: NONE, WATCH, CONCERN, CRITICAL
+Use CRITICAL for SpO2<90, HR>130 or <40, severe hypotension, loss of EtCO2.
+Use CONCERN for two simultaneous mild deviations or waveform abnormality.
+Use WATCH for a single mild deviation.
+Use NONE when all values are within acceptable range."""
+
+PREFLIGHT_PROMPT = """Analyze this image of an anesthesia workstation / patient monitor.
+This is a PRE-FLIGHT camera quality check before surgery.
+
+TASK:
+1. Can you clearly read vital sign numbers on the display?
+2. Can you see waveform tracings (ECG, SpO2, capnography)?
+3. Is the image quality sufficient for continuous monitoring?
+4. Any issues with angle, glare, blur, or obstruction?
+
+RESPOND ONLY with raw JSON (no markdown fences):
+{{
+  "camera_ready": true,
+  "readable_parameters": [],
+  "unreadable_parameters": [],
+  "quality_issues": [],
+  "recommendation": ""
+}}"""
+
+CHAT_SYSTEM = """You are Jarvis, an AI clinical copilot in an operating room.
+You provide concise, evidence-based clinical guidance to anaesthesiologists.
+You are aware of the patient's vitals, baseline, surgical events, and vision data.
+If the clinician reports a surgical event, acknowledge it and adjust your interpretation.
+Be direct, clinical, and actionable. Use numbered lists where appropriate."""
+
+SAFETY_PROMPT = """You are Jarvis, an AI safety monitor. A physiological alert has been triggered.
+
+ALERT DATA:
+{alert_data}
+
+CLINICAL CONTEXT:
+{context}
+
+Provide a rapid clinical safety checklist:
+1. Immediate actions (A-B-C approach)
+2. Things to rule out
+3. Escalation criteria
+
+Be concise and actionable. Use bullet points."""
+
+
+# ─── Helpers ─────────────────────────────────────────────────
+
+def get_client(api_key: Optional[str]) -> genai.Client:
+    key = api_key or os.getenv("GEMINI_API_KEY")
+    if not key:
+        raise HTTPException(status_code=400, detail="Gemini API key required")
+    return genai.Client(api_key=key)
+
+
+def parse_gemini_json(text: str) -> dict:
+    text = text.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        end = len(lines)
+        for i in range(len(lines) - 1, 0, -1):
+            if lines[i].strip().startswith("```"):
+                end = i
+                break
+        text = "\n".join(lines[1:end])
+    return json.loads(text)
+
+
+def decode_image(b64: str) -> Image.Image:
+    if "," in b64:
+        b64 = b64.split(",", 1)[1]
+    return Image.open(io.BytesIO(base64.b64decode(b64)))
+
+
+# ─── Endpoints ───────────────────────────────────────────────
+
+@app.post("/api/analyze")
+async def analyze_frame(req: AnalyzeRequest):
+    client = get_client(req.api_key)
+    img = decode_image(req.image_base64)
+
+    if req.preflight:
+        prompt = PREFLIGHT_PROMPT
+    else:
+        baseline_str = json.dumps(req.baseline) if req.baseline else "No baseline set"
+        ctx = req.patient_context or {}
+        context_str = (
+            f"Patient: {ctx.get('age', 'N/A')}yo | "
+            f"Procedure: {ctx.get('procedure', 'N/A')} | "
+            f"Comorbidities: {ctx.get('comorbidities', 'N/A')}"
+        )
+        events_list = req.surgical_events or []
+        events_str = "\n".join(f"- {e}" for e in events_list) or "None logged"
+        trend_str = req.trend_summary or "No trend data yet"
+
+        prompt = VISION_PROMPT.format(
+            baseline=baseline_str,
+            context=context_str,
+            events=events_str,
+            trend=trend_str,
         )
 
-        for chunk in response:
-
-            if chunk.text:
-                full += chunk.text
-                placeholder.markdown(full)
-
-    st.session_state.history.append(
-        {"role":"assistant","content":full}
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=[prompt, img],
     )
 
-# ------------------------------------------------
-# AUTO SAFETY ALERT
-# ------------------------------------------------
+    try:
+        return parse_gemini_json(response.text)
+    except (json.JSONDecodeError, ValueError):
+        return {"error": "Failed to parse Gemini response", "raw": response.text}
 
-st.markdown("## AI Safety Monitor")
 
-if st.session_state.hr > 110 or st.session_state.spo2 < 92:
+@app.post("/api/chat")
+async def chat_endpoint(req: ChatRequest):
+    client = get_client(req.api_key)
 
-    st.error("⚠ Physiological instability detected")
+    prompt = f"{CHAT_SYSTEM}\n\nCLINICAL CONTEXT:\n{req.context}\n\nCLINICIAN: {req.message}"
 
-    alert_prompt = f"""
-Vitals alert detected.
+    if req.stream:
+        def generate():
+            for chunk in client.models.generate_content_stream(
+                model=GEMINI_MODEL, contents=prompt
+            ):
+                if chunk.text:
+                    yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
 
-HR: {st.session_state.hr}
-SpO2: {st.session_state.spo2}
-
-Provide rapid clinical safety checklist.
-"""
+        return StreamingResponse(generate(), media_type="text/event-stream")
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=alert_prompt
+        model=GEMINI_MODEL, contents=prompt
     )
+    return {"response": response.text}
 
-    st.write(response.text)
 
-# ------------------------------------------------
-# DEVELOPER
-# ------------------------------------------------
+class SafetyRequest(BaseModel):
+    alert_data: str
+    api_key: Optional[str] = None
+    context: str = ""
 
-st.markdown("---")
 
-st.markdown("### Developer")
+@app.post("/api/safety")
+async def safety_check(req: SafetyRequest):
+    client = get_client(req.api_key)
+    prompt = SAFETY_PROMPT.format(alert_data=req.alert_data, context=req.context)
+    response = client.models.generate_content(
+        model=GEMINI_MODEL, contents=prompt
+    )
+    return {"response": response.text}
 
-st.write(
-"""
-Dr Bhavna Gupta  
-Anaesthesiologist  
 
-Project: OR Guardian Live AI  
-Purpose: AI-assisted clinician safety and intraoperative reasoning support
-"""
-)
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "Jarvis OR Guardian"}

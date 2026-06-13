@@ -10,6 +10,25 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
+// Coerce list items (which the model may return as strings OR objects) into
+// readable text so they never render as "[object Object]".
+const fmtItem = (item) => {
+    if (item == null) return '';
+    if (typeof item === 'string') return item;
+    if (typeof item !== 'object') return String(item);
+    if (Array.isArray(item)) return item.map(fmtItem).filter(Boolean).join(', ');
+    // Prefer common descriptive keys if present.
+    for (const key of ['text', 'description', 'message', 'detail', 'name', 'label', 'value']) {
+        if (typeof item[key] === 'string' && item[key].trim()) return item[key];
+    }
+    // Otherwise build a "Key: value" string from all primitive fields.
+    const parts = Object.entries(item)
+        .filter(([, v]) => v != null && typeof v !== 'object')
+        .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`);
+    if (parts.length) return parts.join(' — ');
+    try { return JSON.stringify(item); } catch { return String(item); }
+};
+
 // ─── State ───────────────────────────────────────────────
 
 const state = {
@@ -298,7 +317,7 @@ class AlertEngine {
 
         if (level === 'CRITICAL') {
             this.showCriticalOverlay(analysis);
-            this.speak(`Critical alert. ${(analysis.deviations_from_baseline || [])[0] || 'Immediate attention required.'}`);
+            this.speak(`Critical alert. ${fmtItem((analysis.deviations_from_baseline || [])[0]) || 'Immediate attention required.'}`);
             this.vibrate([500, 200, 500, 200, 500]);
             this.playTone(880, 0.8);
         } else if (level === 'CONCERN') {
@@ -331,7 +350,7 @@ class AlertEngine {
         let detail = c.txt;
         if (analysis) {
             const devs = analysis.deviations_from_baseline || [];
-            if (devs.length) detail += ` — ${devs[0]}`;
+            if (devs.length) detail += ` — ${fmtItem(devs[0])}`;
             else if (analysis.trend_interpretation) detail += ` — ${analysis.trend_interpretation}`;
         }
         text.textContent = detail;
@@ -344,7 +363,7 @@ class AlertEngine {
         const vitalsRow = $('#critical-vitals');
 
         const devs = analysis.deviations_from_baseline || [];
-        msg.textContent = devs[0] || 'Physiological instability detected — immediate attention required';
+        msg.textContent = fmtItem(devs[0]) || 'Physiological instability detected — immediate attention required';
 
         vitalsRow.innerHTML = '';
         const v = analysis.vitals_extracted || {};
@@ -1518,28 +1537,28 @@ class JarvisApp {
         const diffSection = $('#card-differentials');
         if (diffs.length) {
             diffSection.classList.remove('hidden');
-            $('#card-diff-list').innerHTML = diffs.map(d => `<li>${d}</li>`).join('');
+            $('#card-diff-list').innerHTML = diffs.map(d => `<li>${fmtItem(d)}</li>`).join('');
         } else { diffSection.classList.add('hidden'); }
 
         const checks = analysis.immediate_checks || [];
         const checksSection = $('#card-checks');
         if (checks.length) {
             checksSection.classList.remove('hidden');
-            $('#card-checks-list').innerHTML = checks.map(c => `<div class="check-item">${c}</div>`).join('');
+            $('#card-checks-list').innerHTML = checks.map(c => `<div class="check-item">${fmtItem(c)}</div>`).join('');
         } else { checksSection.classList.add('hidden'); }
 
         const actions = analysis.suggested_actions || [];
         const actionsSection = $('#card-actions');
         if (actions.length) {
             actionsSection.classList.remove('hidden');
-            $('#card-actions-list').innerHTML = actions.map(a => `<div class="action-item">${a}</div>`).join('');
+            $('#card-actions-list').innerHTML = actions.map(a => `<div class="action-item">${fmtItem(a)}</div>`).join('');
         } else { actionsSection.classList.add('hidden'); }
 
         const alarms = analysis.alarms_visible || [];
         const alarmsSection = $('#card-alarms');
         if (alarms.length) {
             alarmsSection.classList.remove('hidden');
-            $('#card-alarms-list').innerHTML = alarms.map(a => `<div class="alarm-item">${a}</div>`).join('');
+            $('#card-alarms-list').innerHTML = alarms.map(a => `<div class="alarm-item">${fmtItem(a)}</div>`).join('');
         } else { alarmsSection.classList.add('hidden'); }
 
         const quality = analysis.image_quality_note;
@@ -2629,7 +2648,7 @@ ${this.buildContext()}`;
                 doc.setTextColor(...colors.textPrimary);
                 la.differentials.forEach((d, i) => {
                     checkPage(5);
-                    const lines = doc.splitTextToSize(`${i + 1}. ${d}`, contentW - 10);
+                    const lines = doc.splitTextToSize(`${i + 1}. ${fmtItem(d)}`, contentW - 10);
                     doc.text(lines, margin + 6, y);
                     y += lines.length * 4 + 1;
                 });
@@ -2646,7 +2665,7 @@ ${this.buildContext()}`;
                 doc.setTextColor(...colors.textPrimary);
                 la.suggested_actions.forEach((a) => {
                     checkPage(5);
-                    const lines = doc.splitTextToSize(`\u2022 ${a}`, contentW - 10);
+                    const lines = doc.splitTextToSize(`\u2022 ${fmtItem(a)}`, contentW - 10);
                     doc.text(lines, margin + 6, y);
                     y += lines.length * 4 + 1;
                 });

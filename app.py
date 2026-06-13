@@ -238,11 +238,19 @@ async def chat_endpoint(req: ChatRequest):
     try:
         if req.stream:
             def generate():
-                for chunk in client.models.generate_content_stream(
-                    model=GEMINI_MODEL, contents=prompt
-                ):
-                    if chunk.text:
-                        yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+                try:
+                    for chunk in client.models.generate_content_stream(
+                        model=GEMINI_MODEL, contents=prompt
+                    ):
+                        if chunk.text:
+                            yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+                except Exception as e:
+                    detail = str(e)
+                    if "API_KEY_INVALID" in detail or "API key not valid" in detail:
+                        msg = "Invalid Gemini API key. Please check your key and try again."
+                    else:
+                        msg = f"Gemini API error: {detail}"
+                    yield f"data: {json.dumps({'error': msg})}\n\n"
                 yield f"data: {json.dumps({'done': True})}\n\n"
 
             return StreamingResponse(generate(), media_type="text/event-stream")

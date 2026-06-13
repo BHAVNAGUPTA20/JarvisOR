@@ -1880,6 +1880,10 @@ class JarvisApp {
                     if (!line.startsWith('data: ')) continue;
                     try {
                         const parsed = JSON.parse(line.slice(6));
+                        if (parsed.error) {
+                            bubbleEl.textContent = `Error: ${parsed.error}`;
+                            return;
+                        }
                         if (parsed.done) break;
                         if (parsed.text) {
                             fullText += parsed.text;
@@ -1930,17 +1934,39 @@ class JarvisApp {
 
         let procedureInfo = `Procedure / Reason: ${ctx.procedure}`;
         if (ctx.urgency) procedureInfo += ` (${ctx.urgency})`;
+        if (ctx.specialty) procedureInfo += ` | Specialty: ${ctx.specialty}`;
+        if (ctx.duration) procedureInfo += ` | Est. duration: ${ctx.duration}`;
         if (ctx.anesthesia_technique) procedureInfo += ` | Sedation/Anesthesia: ${ctx.anesthesia_technique}`;
         if (ctx.position) procedureInfo += ` | Position: ${ctx.position}`;
         parts.push(procedureInfo);
 
+        if (ctx.diagnosis) parts.push(`Diagnosis: ${ctx.diagnosis}`);
         parts.push(`Comorbidities: ${ctx.comorbidities}`);
         if (ctx.medications && ctx.medications !== 'None') {
-            parts.push(`Medications: ${ctx.medications} (Controlled: ${ctx.medication_controlled})`);
+            let meds = `Medications: ${ctx.medications} (Controlled: ${ctx.medication_controlled})`;
+            if (ctx.other_medications) meds += ` | Other: ${ctx.other_medications}`;
+            parts.push(meds);
+        } else if (ctx.other_medications) {
+            parts.push(`Medications: ${ctx.other_medications} (Controlled: ${ctx.medication_controlled})`);
         }
         if (ctx.allergies) parts.push(`Allergies: ${ctx.allergies}`);
-        if (ctx.difficult_airway === 'Yes') parts.push('⚠ Anticipated difficult airway');
+
+        let airway = '';
+        if (ctx.difficult_airway === 'Yes') airway += '⚠ Anticipated difficult airway';
+        if (ctx.airway_assessment) airway += `${airway ? ' | ' : ''}Airway assessment: ${ctx.airway_assessment}`;
+        if (airway) parts.push(airway);
+
         if (ctx.monitoring_plan) parts.push(`Monitoring: ${ctx.monitoring_plan}`);
+        if (ctx.npo_hours) parts.push(`NPO status: ${ctx.npo_hours} hours`);
+        if (ctx.pregnancy && ctx.pregnancy !== 'N/A') parts.push(`Pregnancy: ${ctx.pregnancy}`);
+
+        let blood = '';
+        if (ctx.blood_group) blood += `Blood group: ${ctx.blood_group}`;
+        if (ctx.blood_products) blood += `${blood ? ' | ' : ''}Blood products: ${ctx.blood_products}`;
+        if (blood) parts.push(blood);
+
+        if (ctx.icu_planned && ctx.icu_planned !== 'No') parts.push(`Postop ICU planned: ${ctx.icu_planned}`);
+        if (ctx.notes) parts.push(`Clinical notes: ${ctx.notes}`);
 
         if (state.baseline) {
             const b = state.baseline;
